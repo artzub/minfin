@@ -1,0 +1,220 @@
+body.wait, body.wait * {
+    cursor: progress !important;
+}
+
+body, html, div, ul {
+    margin: 0;
+    padding: 0;
+}
+
+body, html {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+
+    font-family: sans,serif;
+}
+
+#ui {
+    pointer-events: none;
+}
+
+.override {
+    pointer-events: all;
+}
+
+body {
+    /*background: #1B4A63;*/
+    background: #2e7294;
+    background: -moz-radial-gradient(center, ellipse cover,  #2e7294 0%, #1b4a63 100%);
+    background: -webkit-gradient(radial, center center, 0px, center center, 100%, color-stop(0%,#2e7294), color-stop(100%,#1b4a63));
+    background: -webkit-radial-gradient(center, ellipse cover,  #2e7294 0%,#1b4a63 100%);
+    background: -o-radial-gradient(center, ellipse cover,  #2e7294 0%,#1b4a63 100%);
+    background: -ms-radial-gradient(center, ellipse cover,  #2e7294 0%,#1b4a63 100%);
+    background: radial-gradient(ellipse at center,  #2e7294 0%,#1b4a63 100%);
+    filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#2e7294', endColorstr='#1b4a63',GradientType=1 );
+
+}
+
+.layer {
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    display: block;
+
+    /* this property sets z-inder from data attribute */
+    z-index: attr(data-z-index integer, 1);
+}
+
+.top {
+    top: 0;
+}
+.left {
+    left: 0;
+}
+.bottom {
+    bottom: 0;
+}
+.right {
+    right: 0;
+}
+
+#vis {
+    vertical-align: middle;
+}
+
+#vis > div {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.progress {
+    position: relative;
+    /*overflow: hidden;*/
+    color: #fff;
+    display: inline-block;
+    vertical-align: middle;
+    width: 100%;
+    box-sizing: border-box;
+    /*border: 4px solid transparent;*/
+    }
+    .progress > div {
+        box-sizing: border-box;
+        background: transparent;
+        /*overflow: hidden;*/
+        width: 100%;
+        height: 100%;
+        position: relative;
+        /*border: 2px solid #333;*/
+    }
+    .progress > div > div {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        background: rgb(92, 167, 204);
+        z-index: 0;
+        border-top-right-radius: 2px;
+        border-bottom-right-radius: 2px;
+    }
+    .progress > div > div:after {
+        content: "";
+        position: absolute;
+        right: -29px;
+        top: 0;
+        padding: 2px 10px;
+        display: block;
+        box-shadow: -28px 0 10px 2px rgba(162, 216, 240, 1);
+        z-index: 10;
+        border-radius: 2px;
+        background: transparent;
+    }
+    .progress > div > div:before {
+        content: "";
+        position: absolute;
+        right: 0;
+        top: 0;
+        padding: 2px;
+        display: block;
+        background: rgba(162, 216, 240, 1);
+        box-shadow: 0 0 10px 2px rgba(162, 216, 240, 1);
+        z-index: 11;
+        border-radius: 2px;
+    }
+    .progress > div > span {
+        display: none;
+        position: absolute;
+        top: 0;
+        left: 1px;
+        z-index: 2;
+    }
+
+
+svg {
+}
+
+.node {
+    cursor: pointer;
+}
+
+.node circle {
+    fill: #fff;
+    stroke: steelblue;
+    stroke-width: 1px;
+    /*shape-rendering: crispEdges;*/
+}
+
+.node rect {
+    stroke: #3d4f87;
+    stroke-width: 1px;
+    fill: #5888af;
+    fill-opacity: .5;
+    /*shape-rendering: crispEdges;*/
+}
+
+.node text {
+    fill: #fff;
+    font-size: 11px;
+}
+
+path.link {
+    fill: none;
+    stroke: #ccc;
+    stroke-width: 1px;
+    /*shape-rendering: crispEdges;*/
+}
+
+
+#bottomBar {
+    position: absolute;
+    width: 100%;
+    height: 128px;
+    background: rgba(0, 0,0, 0.2);
+    box-shadow: 0 -4px 6px rgba(0, 0,0, 0.1);
+    border-top: 1px solid rgba(0, 0,0, 0.3);
+}
+
+#surfaceContainer,
+#metricsContainer {
+    display: inline-block;
+    vertical-align: top;
+    height: 100%;
+}
+#surfaceContainer {
+    width: 100%;
+    z-index: 0;
+}
+
+#surfaceContainer path {
+    stroke: #fff;
+    stroke-opacity: .2;
+}
+
+#metricsContainer {
+    position: absolute;
+    z-index: 1;
+}
+
+#metricsContainer ul {
+    list-style: none;
+    width: 100%;
+    box-shadow: -1px -1px 2px rgba(0, 0, 0, .7);
+}
+
+#metricsContainer li {
+    background: rgba(0, 0, 0, .5);
+    color: rgb(191, 208, 220);
+    text-shadow: 1px 1px rgba(0, 0, 0, 1);
+    padding: 5px 10px;
+    border: 1px solid rgba(0, 0, 0, .6);
+    cursor: pointer;
+    text-align: center;
+}
+
+#metricsContainer li.selected,
+#metricsContainer li:hover {
+    text-shadow: 1px 1px rgba(226, 243, 255, .8);
+    box-shadow: inset 0 0 10px rgba(226, 243, 255, .5);
+}

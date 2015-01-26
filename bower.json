@@ -1,0 +1,14 @@
+{
+  "name": "minfin",
+  "version": "0.1",
+  "description": "",
+  "authors": [
+    "Artzub"
+  ],
+  "license": "MIT",
+  "homepage": "http://artzub.com/",
+  "dependencies": {
+    "async": "~0.9.2",
+    "d3": "~3.5.3"
+  }
+}
