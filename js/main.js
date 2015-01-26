@@ -3,6 +3,8 @@
  * @author {@link http://artzub.com|Artem Zubkov}
  */
 
+"use strict";
+
 (function() {
     var rawData
         , tree
@@ -10,7 +12,12 @@
         , height = innerHeight
         , selectedMetric
         , selectedData
-        , metrics
+        , metrics = {
+            total_budget : "Итого по бюджетам"
+            , resp_budgets : "Республиканские бюджеты"
+            , local_budgets : "Местные бюджеты"
+            , union_budget : "Союзный бюджет"
+        }
         ;
 
     var ui = d3.select('#ui')
@@ -51,7 +58,7 @@
             'position': 'absolute',
             'width': '100%',
             'bottom': '4px',
-            'height': '120px'
+            'height': '176px'
         })
         .attr('class', 'left bottom')
     ;
@@ -66,75 +73,88 @@
         return 0;
     }
 
-    function makeMatrix(metric, d) {
-        var result = {}
-            , row
-            , current = d
-            , parent
-            , values
-            , key
-            , stack = []
-            , day
-            , maxResult = 0
-            ;
-
-        var i = rawData.length;
-        while(i--) {
-            row = rawData[i];
-            current = d;
-            switch (current.depth) {
-                case 3:
-                    if (dfW(row.time) != current.key)
-                        continue;
-                    current = current.parent;
-                case 2:
-                    if (dfM(row.time) != current.key)
-                        continue;
-                    current = current.parent;
-                case 1:
-                    if (dfY(row.time) != current.key)
-                        continue;
-                    break;
-            }
-            key = +dfWd(row.time);
-
-            day = result[key];
-            if (!day)
-                day = result[key] = {};
-
-            key = +dfDH(row.time);
-            if (!day[key])
-                day[key] = [];
-            if (row.hasOwnProperty(metric))
-                day[key].push(row[metric].value);
-            maxResult = Math.max(maxResult, day[key].length);
-        }
-
-        var arr = new Array(7)
-            , hour
-            ;
-        key = arr.length;
-
-        while(key--) {
-            day = arr[key] = new Array(23);
-            hour = arr[key].length;
-            while(hour--) {
-                if(!result[key] || !result[key][hour]) {
-                    day[hour] = 0;
-                    continue;
-                }
-
-                stack = result[key][hour];
-                if (maxResult > stack.length) {
-                    stack = stack.concat(d3.range(0, maxResult - stack.length).map(getZero))
-                }
-
-                day[hour] = d3.mean(stack);
-            }
-        }
-
-        return arr;
+    function safeValues(d) {
+        return d.values || d._values || [];
     }
+
+    function makeMatrix(metric, selected) {
+        var result = {}
+            , stack = []
+            , reg = /^\d{4}$/
+            , d = selected
+            , value
+            , data
+            , i
+            , j
+            , max = 0
+            , years = {}
+            ;
+
+        data = safeValues(d);
+        i = data.length;
+
+        var key = d.depth == 1
+            ? 'level'
+            : d.depth == 2
+            ? 'subLevel'
+            : 'name'
+        ;
+
+        while(i--) {
+            d = data[i];
+            if(reg.test(d.key)) {
+                d = safeValues(d)[0];
+                value = result[d[key]];
+                if(!value)
+                    value = result[d[key]] = {};
+                years[d.year] = 1;
+                value = value[d.year] = d[metric];
+                max = Math.max(value, max);
+            }
+            else {
+                stack.push({
+                    data : data,
+                    i : i
+                });
+                while((data = safeValues(d))[0].key == d.key)
+                    d = data[0];
+                i = data.length;
+            }
+            if (!i && stack.length) {
+                d = stack.pop();
+                data = d.data;
+                i = d.i;
+            }
+        }
+
+        data = Object.keys(result);
+        years = Object.keys(years);
+        j = years.length;
+        i = data.length;
+        if (!i || !j)
+            return [[]];
+
+        years.sort().reverse();
+
+        stack = new Array(i + 1);
+        while(i--) {
+            j = years.length;
+            stack[i] = new Array(j);
+            while(j--) {
+                value = result[data[i]];
+                value = value[years[j]];
+                stack[i][j] = value
+                    ? value/(max||value)
+                    : 0
+                ;
+            }
+        }
+        stack[stack.length - 1] = years.map(getZero);
+
+        console.log(stack);
+        return stack;
+    }
+
 
     function makeSurface(d, multi) {
         selectedData = d;
@@ -147,41 +167,43 @@
         if (!selectedMetric)
             return;
 
-        surface.appendSurface(selectedMetric, makeMatrix(selectedMetric, d), multi);
+        surface.appendSurface(selectedMetric,
+            makeMatrix(selectedMetric, d), multi);
     }
 
-    function initMetrics(data) {
+    function initMetrics() {
         metricsContainer.div.selectAll('ul')
             .remove();
 
 
-        if (!data || !selectedMetric || !data[selectedMetric])
+        if (!metrics || !selectedMetric)
             selectedMetric = null;
 
-        data = Object.keys(data);
-        selectedMetric = !selectedMetric ? (data && data.length ? data[0] : null) : selectedMetric;
+        var data = Object.keys(metrics);
+
+        selectedMetric = !selectedMetric
+            ? (data && data.length ? data[0] : null)
+            : selectedMetric;
 
         metricsContainer.div
             .append('ul')
-            .attr('title', 'Ctrl+Mouse for multi-select')
             .selectAll('li')
             .data(data)
             .enter()
             .append('li')
             .text(function(d) {
-                return d;
+                return metrics[d];
             })
             .on('click', function(d) {
                 setWait();
-                (!d3.event || !d3.event.ctrlKey)
-                && d3.select(this.parentNode)
+                d3.select(this.parentNode)
                     .selectAll('li')
                     .classed('selected', false)
                 ;
                 d3.select(this).classed('selected', true);
 
                 selectedMetric = d;
-                selectedData && makeSurface(selectedData, d3.event && d3.event.ctrlKey);
+                selectedData && makeSurface(selectedData);
 
                 unsetWait();
             })
@@ -205,13 +227,31 @@
             tree = layers.treeBar();
             tree.on('select', function(d) {
                 setWait();
-                //makeSurface(d);
-                controls.log(d);
+                makeSurface(d);
                 unsetWait();
             });
         }
         tree.addTo(treeContainer)
             .data(data);
+    }
+
+    /**
+     * @param {string} cost
+     * @returns {number}
+     */
+    function fixCost(cost) {
+        return !cost || cost == "-" ? 0 : parseFloat(cost.replace(',', '.'));
+    }
+
+    var costKeys = Object.keys(metrics);
+    function fixCosts(d) {
+        var key
+            , i = costKeys.length
+            ;
+
+        while(i--)
+            if (d.hasOwnProperty(key = costKeys[i]))
+                d[key] = fixCost(d[key]);
     }
 
     function dataParsing(err, inData) {
@@ -236,19 +276,6 @@
             , reg2 = /^\d+/
             ;
 
-        inData.forEach(function(d) {
-            lastName = d.name || lastName;
-            d.name = lastName;
-            if (reg.test(d.name)) {
-                level = d.name;
-                subLevel = level;
-            } else if (reg2.test(d.name)) {
-                subLevel = d.name;
-            }
-            d.level = level;
-            d.subLevel = subLevel;
-        });
-
         data = d3.nest()
             .key(function(d) {
                 return d.level;
@@ -262,8 +289,36 @@
             .key(function(d) {
                 return d.year;
             })
-            .entries(inData)
+            .entries(inData.filter(function(d) {
+                lastName = d.name || lastName;
+
+                if (lastName == "Содержание органов государственного управления") {
+                    lastName = "1. " + lastName;
+                }
+                else if (lastName == "Судебные учреждения, прокуратура и нотариат") {
+                    lastName = "2. " + lastName;
+                }
+
+                d.name = lastName;
+
+                if (reg.test(d.name)) {
+                    level = d.name;
+                    subLevel = level;
+                } else if (reg2.test(d.name)) {
+                    subLevel = d.name;
+                }
+                d.level = level;
+                d.subLevel = subLevel;
+
+                fixCosts(d);
+
+                return d.year && d.name != "Итого расходов";
+            }))
         ;
+        data = [{
+            key : "Исторический бюджет",
+            values : data
+        }];
 
         data.forEach(function t(d) {
             if (!d.key)
@@ -276,7 +331,7 @@
             .title('Complete!')
         ;
 
-        //initMetrics(metrics);
+        initMetrics(metrics);
         initTree(data);
     }
 

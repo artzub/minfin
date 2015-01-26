@@ -3,9 +3,8 @@
  * @author {@link http://artzub.com|Artem Zubkov}
  */
 
-/**
- * @namespace
- */
+"use strict";
+
 var layers = {};
 layers.merge = app.merge;
 

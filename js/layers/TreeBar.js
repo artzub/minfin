@@ -3,6 +3,8 @@
  * @author {@link http://artzub.com|Artem Zubkov}
  */
 
+"use strict";
+
 var layers = layers || {};
 
 /**
@@ -100,7 +102,10 @@ layers.TreeBar = function(options) {
     }
 
     function depthFilter(d) {
-        return d.depth < 4;
+        return d.depth < 5 && d.hasOwnProperty('values')
+            && (!d.parent
+                || d.key != d.parent.key)
+            ;
     }
 
     function update(source) {
@@ -112,12 +117,12 @@ layers.TreeBar = function(options) {
         var mb = that.options.margin.bottom;
 
         // Compute the new tree layout.
-        var nodes = tree.nodes(root).reverse();
+        var nodes = tree.nodes(root).filter(depthFilter).reverse();
 
         // Update the nodes…
         var node = vis.selectAll("g.node")
-            .data(nodes.filter(depthFilter), function(d) {
-                d.y = height - (d.depth - 1) * (mb + 26);
+            .data(nodes, function(d) {
+                d.y = height - (d.depth == 1 ? mb * .3 : (d.depth - 1) * (mb + 26));
                 return d.id || (d.id = ++i);
             });
 
@@ -129,7 +134,7 @@ layers.TreeBar = function(options) {
                 return d.key;
             })
             .on("click", function(d) {
-                d.depth < 3 && toggle(d);
+                toggle(d);
                 update(d);
                 dispatch.select(d);
             });
@@ -146,7 +151,11 @@ layers.TreeBar = function(options) {
             .attr("dy", "1.2em")
             //.attr("dx", ".95em")
             .attr("text-anchor", "middle" /*function(d) { return d.values || d._values ? "middle" : "start"; }*/)
-            .text(function(d) { return d.depth > 1 ? d.key.substr(0, 5) + '...' : d.key; })
+            .text(function(d) {
+                return d.key.length > 5 && d.depth > 2
+                    ? d.key.substr(0, 5) + '...'
+                    : d.key;
+            })
             .style("fill-opacity", 1e-6);
 
         // Transition nodes to their new position.
@@ -196,8 +205,10 @@ layers.TreeBar = function(options) {
         // Update the links…
         var link = vis.selectAll("path.link")
             .data(tree.links(nodes.filter(function(d) {
-                return depthFilter(d) && d.key != "root";
-            })), function(d) { return d.target.id; });
+                return d.key != "root";
+            })).filter(function(d) {
+                return d.target.depth < 5 && d.source.key != d.target.key;
+            }), function(d) { return d.target.id; });
 
         // Enter any new links at the parent's previous position.
         link.enter().insert("svg:path", "g")
@@ -247,17 +258,17 @@ layers.TreeBar = function(options) {
         };
 
         function toggleAll(d) {
-            if (d.values) {
-                d.values.forEach(toggleAll);
-                toggle(d);
-            }
+            if (!d.values)
+                return;
+            d.values.forEach(toggleAll);
+            toggle(d);
         }
 
         data.forEach(toggleAll);
         var has = root.values && root.values.length ? root.values[0] : null;
-        //has && toggle(has);
+        has && toggle(has);
         update(root);
-        //has && dispatch.select(has);
+        has && dispatch.select(has);
         return that;
     };
 

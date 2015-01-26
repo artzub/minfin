@@ -3,6 +3,8 @@
  * @author {@link http://artzub.com|Artem Zubkov}
  */
 
+"use strict";
+
 var layers = layers || {};
 
 /**
@@ -19,6 +21,7 @@ var layers = layers || {};
  * @see LayerOptions
  * @implements layers.BaseLayer
  */
+
 layers.Layer = function(options) {
     var that = this;
 

@@ -3,6 +3,8 @@
  * @author {@link http://artzub.com|Artem Zubkov}
  */
 
+"use strict";
+
 (function(app){
 
     /**

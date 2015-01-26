@@ -1,9 +1,11 @@
-(function () {
+"use strict";
 
-    /**
-     * @callback ItemCallback
-     * @param d
-     */
+/**
+ * @callback ItemCallback
+ * @param d
+ */
+
+(function () {
 
     /**
      * @param {d3.selection} node
@@ -36,9 +38,11 @@
             var x = data.length
                 , yL = data[0].length
                 , y
+                , t
                 ;
             while(x--) {
-                output.push(t = []);
+                t = [];
+                output.push(t);
                 y = yL;
                 while(y--) {
                     var value = heightFunction(data[x][y], x, y);
@@ -113,20 +117,26 @@
                             + ',' + (data[x + 1][y + 1][1] + displayHeight / 2).toFixed(10)
                             + 'L' + (data[x][y + 1][0] + displayWidth / 2).toFixed(10)
                             + ',' + (data[x][y + 1][1] + displayHeight / 2).toFixed(10) + 'Z',
-                        depth: depth, data: originalData[x][y]
+                        depth: depth,
+                        data: originalData[x][y],
+                        id : [x, y].join('')
                     });
                 }
             }
-            d0.sort(function (a, b) {
-                return b.depth - a.depth
+
+            var dr = node.selectAll('path').data(d0, function(d) {
+                return d.id;
             });
-            var dr = node.selectAll('path').data(d0);
             dr.enter().append("path");
             if (colorFunction) {
                 dr.attr("fill", function (d) {
                     return colorFunction(d.data)
                 });
             }
+            dr.exit().remove();
+            dr.sort(function (a, b) {
+                return b.depth - a.depth
+            });
             if (trans) {
                 dr = dr.transition().delay(trans.delay()).duration(trans.duration());
             }
@@ -236,7 +246,7 @@
          * @returns {Surface|Number}
          */
         this.setWidth = function (width) {
-            if(!arguments.length || !height)
+            if(!arguments.length || !width)
                 return displayWidth;
 
             if (width) {
