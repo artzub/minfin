@@ -10,6 +10,7 @@
         , tree
         , width = innerWidth
         , height = innerHeight
+        , maxHeight = 250
         , selectedMetric
         , selectedData
         , metrics = {
@@ -18,6 +19,8 @@
             , local_budgets : "Местные бюджеты"
             , union_budget : "Союзный бюджет"
         }
+        , colors = d3.scale.ordinal()
+            .range(d3.range(50, 300, 20))
         ;
 
     var ui = d3.select('#ui')
@@ -67,10 +70,20 @@
     metricsContainer.div.attr('id', 'metricsContainer');
 
     var surface = layers.surface().addTo(surfaceContainer.div);
-    surface.maxHeight(300);
 
-    function getZero() {
-        return 0;
+    var zero = {
+        value : 0,
+        data : null,
+        normalized : 0
+    };
+    function getZero(name, year) {
+        return name ? {
+            value : 0,
+            data : null,
+            name : name,
+            year : year,
+            normalized : 0
+        } : zero;
     }
 
     function safeValues(d) {
@@ -84,10 +97,10 @@
             , d = selected
             , value
             , data
-            , i
-            , j
+            , i, j
             , max = 0
             , years = {}
+            , name, year
             ;
 
         data = safeValues(d);
@@ -108,16 +121,23 @@
                 if(!value)
                     value = result[d[key]] = {};
                 years[d.year] = 1;
-                value = value[d.year] = d[metric];
-                max = Math.max(value, max);
+                value = value[d.year] = {
+                    value : d[metric],
+                    data : d
+                };
+                max = Math.max(value.value, max);
             }
             else {
                 stack.push({
                     data : data,
                     i : i
                 });
-                while((data = safeValues(d))[0].key == d.key)
+                if(d.depth > 2 && d.key == d.parent.key && safeValues(d.parent).length > 1)
+                    break;
+                while((data = safeValues(d))[0].key == d.key) {
+                    value = d.key;
                     d = data[0];
+                }
                 i = data.length;
             }
             if (!i && stack.length) {
@@ -138,15 +158,22 @@
 
         stack = new Array(i + 1);
         while(i--) {
+            name = data[i];
             j = years.length;
             stack[i] = new Array(j);
             while(j--) {
-                value = result[data[i]];
-                value = value[years[j]];
-                stack[i][j] = value
-                    ? value/(max||value)
-                    : 0
-                ;
+                year = years[j];
+                value = result[name];
+                value = value[year];
+                stack[i][j] = value ? {
+                    value : value.value,
+                    data : value.data,
+                    name : name,
+                    year : year,
+                    normalized : value.value
+                        ? value.value/(max||value.value)
+                        : 0
+                } : getZero(name, year);
             }
         }
         stack[stack.length - 1] = years.map(getZero);
@@ -168,7 +195,28 @@
             return;
 
         surface.appendSurface(selectedMetric,
-            makeMatrix(selectedMetric, d), multi);
+            makeMatrix(selectedMetric, d), multi)
+            .surface
+            .transition()
+            .duration(500)
+            .surfaceHeight(surfaceHeight)
+            .surfaceColor(surfaceColor)
+            .surfaceCellId(surfaceCellId)
+        ;
+    }
+
+    function surfaceCellId(d, x, y) {
+        return d.name ? d.name + y : x + ' ' + y
+    }
+
+    function surfaceHeight(d) {
+        return -d.normalized * height * .35;
+    }
+
+    function surfaceColor(d) {
+        var c = d.name ? colors(d.name) : 0;
+        c = d3.hsl(c, 1, d.name ? 0.5 + d.normalized/2 : 0).rgb();
+        return "rgba(" + parseInt(c.r) + "," + parseInt(c.g) + "," + parseInt(c.b) + ",.5)";
     }
 
     function initMetrics() {
@@ -255,7 +303,10 @@
     }
 
     function dataParsing(err, inData) {
-        var data = [];
+        var data = []
+            , hashNames = {}
+            ;
+
 
         progress.title('Analyse data...')
             .position(20)
@@ -300,6 +351,7 @@
                 }
 
                 d.name = lastName;
+                hashNames[lastName] = 1;
 
                 if (reg.test(d.name)) {
                     level = d.name;
@@ -319,6 +371,12 @@
             key : "Исторический бюджет",
             values : data
         }];
+
+        hashNames = Object.keys(hashNames);
+
+        colors
+            .range(d3.range(0, 300, 500/(hashNames.length||1)))
+            .domain(hashNames);
 
         data.forEach(function t(d) {
             if (!d.key)

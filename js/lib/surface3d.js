@@ -1,11 +1,39 @@
 "use strict";
 
 /**
+ * http://bl.ocks.org/supereggbert/aff58196188816576af0
+ */
+
+/**
  * @callback ItemCallback
- * @param d
+ * @param d - data
+ */
+
+/**
+ * @callback CellIdCallback
+ * @param d - data
+ * @param i - index
+ * @param j - index
  */
 
 (function () {
+
+    //Cache function
+    var svg = {
+        getId : function(d) {
+            return d.id;
+        },
+        getTranslate : function(d) {
+            return "translate(" + d.point + ")";
+        },
+        getPath : function (d) {
+            return d.path;
+        },
+        getSort : function (a, b) {
+            return b.depth - a.depth
+        },
+        getColor : null
+    };
 
     /**
      * @param {d3.selection} node
@@ -14,12 +42,24 @@
     var Surface = function (node) {
         var heightFunction
             , colorFunction
+            , cellIdFunction
+            , cellOverFunction
+            , cellOutFunction
+            , cellMoveFunction
             , timer
-            , transformPrecalc = [];
-        var displayWidth = 300
+            , transformPrecalc = []
+            , displayWidth = 300
             , displayHeight = 300
-            , zoom = 1;
-        var trans;
+            , zoom = 1
+            , trans
+        ;
+
+        /**
+         * @returns {d3.selection}
+         */
+        this.node = function() {
+            return node;
+        };
 
         /**
          * Set zoom level
@@ -32,60 +72,99 @@
             timer = setTimeout(renderSurface, 0);
         };
 
-        var getHeights = function () {
-            var data = node.datum();
+        var getHeights = function (data) {
             var output = [];
             var x = data.length
                 , yL = data[0].length
                 , y
-                , t
+                , temp
+                , value
                 ;
             while(x--) {
-                t = [];
-                output.push(t);
+                temp = [];
                 y = yL;
                 while(y--) {
-                    var value = heightFunction(data[x][y], x, y);
-                    t.push(value);
+                    value = heightFunction(data[x][y], x, y);
+                    temp.push(value);
                 }
+                output.push(temp);
             }
             return output;
         };
 
         var transformPoint = function (point) {
-            var x = transformPrecalc[0] * point[0] + transformPrecalc[1] * point[1] + transformPrecalc[2] * point[2];
-            var y = transformPrecalc[3] * point[0] + transformPrecalc[4] * point[1] + transformPrecalc[5] * point[2];
-            var z = transformPrecalc[6] * point[0] + transformPrecalc[7] * point[1] + transformPrecalc[8] * point[2];
-            return [x, y, z];
+            var l = transformPrecalc.length
+                , output = new Array(l/3)
+                , p0 = point[0]
+                , p1 = point[1]
+                , p2 = point[2]
+                ;
+            while((l -= 3) > -1)
+                output[~~(l/3)] = transformPrecalc[l] * p0
+                    + transformPrecalc[l + 1] * p1
+                    + transformPrecalc[l + 2] * p2
+                ;
+            return output;
         };
 
-        var getTransformedData = function () {
-            var data = node.datum();
-            if (!heightFunction)
+        var getTransformedData = function (data, asix) {
+            if (!heightFunction || !data || !data.length || !data[0] || !data[0].length)
                 return [[]];
-            var t, output = [];
-            var heights = getHeights();
-            var x, y
+            var t, a, k, kx, ky
+                , output = []
+                , heights = getHeights(data)
+                , x, y
                 , xLength = data.length
                 , yLength = data[0].length
                 ;
             x = xLength;
-            var a = Math.min(displayWidth, displayHeight) || 1;
-            var k = 1; //1.41
-            var kx = a*k/xLength;
-            var ky = a*k/yLength;
+            a = Math.min(displayWidth, displayHeight) || 1;
+            k = 1; //1.41
+            kx = a*k/xLength;
+            ky = a*k/yLength;
             while(x--) {
-                output.push(t = []);
+                t = [];
+                output.push(t);
                 y = yLength;
                 while(y--) {
                     t.push(transformPoint([
                         (x - xLength / 2) * kx * zoom
-                        , heights[x][y] * zoom
+                        , asix ? 0 : heights[x][y] * zoom
                         , (y - yLength / 2) * ky * zoom
                     ]));
                 }
             }
             return output;
+        };
+
+        var getAsix = function (lx, ly) {
+            var t, a, k, kx, ky
+                , output = []
+                , x, y
+                , xLength = lx++
+                , yLength = ly++
+                ;
+            a = Math.min(displayWidth, displayHeight) || 1;
+            k = 1; //1.41
+            kx = a*k/xLength;
+            ky = a*k/yLength;
+            var min = lx <= ly ? 1 : 0;
+            var valx, valy;
+            for(x = -1; x < lx; x++) {
+                t = [];
+                output.push(t);
+                for(y = -1; y < ly; y++) {
+                    valx = (x - xLength/2) * kx * zoom;
+                    valy = (y - yLength/2) * ky * zoom;
+
+                    t.push(transformPoint([valx, 0, valy]));
+                }
+            }
+            return output;
+        };
+
+        svg.getPathColor = function (d) {
+            return colorFunction ? colorFunction(d.data) : null;
         };
 
         /**
@@ -94,55 +173,174 @@
          * @memberOf {Surface}
          */
         var renderSurface = function () {
-            var originalData = node.datum();
-            var data = getTransformedData();
-            var xLength = data.length;
-            var yLength = data[0].length;
-            var d0 = [];
+            var originalData = node.datum()
+                , data = getTransformedData(originalData)
+                , xLength = data.length
+                , yLength = data[0].length
+                , d, d0 = []
+                , w2 = displayWidth/2
+                , h2 = displayHeight/2
+                , x, y, px, py, dpx, dpy
+                , depth
+                , asix = getAsix(xLength, yLength)
+            ;
 
-
-            for (var x = 0; x < xLength - 1; x++) {
-                for (var y = 0; y < yLength - 1; y++) {
-                    var depth = data[x][y][2]
+            for (x = 0; x < xLength - 1; x++) {
+                for (y = 0; y < yLength - 1; y++) {
+                    depth = data[x][y][2]
                         + data[x + 1][y][2]
                         + data[x + 1][y + 1][2]
                         + data[x][y + 1][2]
-                        ;
+                    ;
+                    px = data[x][y][0] + w2;
+                    py = data[x][y][1] + h2;
+                    dpx = w2 - px;
+                    dpy = h2 - py;
+                    d = originalData[x][y];
+
                     d0.push({
-                        path: 'M' + (data[x][y][0] + displayWidth / 2).toFixed(10)
-                            + ',' + (data[x][y][1] + displayHeight / 2).toFixed(10)
-                            + 'L' + (data[x + 1][y][0] + displayWidth / 2).toFixed(10)
-                            + ',' + (data[x + 1][y][1] + displayHeight / 2).toFixed(10)
-                            + 'L' + (data[x + 1][y + 1][0] + displayWidth / 2).toFixed(10)
-                            + ',' + (data[x + 1][y + 1][1] + displayHeight / 2).toFixed(10)
-                            + 'L' + (data[x][y + 1][0] + displayWidth / 2).toFixed(10)
-                            + ',' + (data[x][y + 1][1] + displayHeight / 2).toFixed(10) + 'Z',
-                        depth: depth,
-                        data: originalData[x][y],
-                        id : [x, y].join('')
+                        path: 'M0,0'
+                            + 'L' + (data[x + 1][y][0] + dpx).toFixed(10)
+                            + ',' + (data[x + 1][y][1] + dpy).toFixed(10)
+                            + 'L' + (data[x + 1][y + 1][0] + dpx).toFixed(10)
+                            + ',' + (data[x + 1][y + 1][1] + dpy).toFixed(10)
+                            + 'L' + (data[x][y + 1][0] + dpx).toFixed(10)
+                            + ',' + (data[x][y + 1][1] + dpy).toFixed(10) + 'Z'
+                        , depth: depth
+                        , point: [px.toFixed(10), py.toFixed(10)]
+                        , data: d
+                        , id : cellIdFunction
+                            ? cellIdFunction(d, x, y)
+                            : [x, y].join('')
                     });
                 }
             }
 
-            var dr = node.selectAll('path').data(d0, function(d) {
-                return d.id;
-            });
-            dr.enter().append("path");
-            if (colorFunction) {
-                dr.attr("fill", function (d) {
-                    return colorFunction(d.data)
-                });
-            }
+            var dr = node.selectAll('g.cell')
+                .data(d0, svg.getId)
+                ;
+
+            var gs = dr.enter()
+                .append('g')
+                .attr('class', 'cell')
+                .on('mouseover', cellOverFunction)
+                .on('mouseout', cellOutFunction)
+                .on('mousemove', cellMoveFunction)
+                .attr('transform', 'translate(' + [w2, h2] + ')')
+            ;
+            gs.append("path");
+            gs.append("circle").attr('r', 2.5);
+
+            dr.selectAll("path")
+                .datum(function() {
+                    return this.parentNode.__data__
+                })
+                .attr("fill", svg.getPathColor)
+            ;
+            /*dr.selectAll("cirlce")
+                .attr("fill", svg.getPathColor)
+            ;*/
+
             dr.exit().remove();
-            dr.sort(function (a, b) {
-                return b.depth - a.depth
+
+            dr.sort(svg.getSort);
+
+            dr = trans
+                ? dr.transition()
+                    .delay(trans.delay())
+                    .duration(trans.duration())
+                : dr
+            ;
+
+            dr.attr("transform", svg.getTranslate)
+                .selectAll("path")
+                .attr("d", svg.getPath)
+            ;
+
+            //node.selectAll('g.asix').remove();
+
+            px = transformPoint([-0, 0, -0]);
+
+            asix = node.selectAll('g.asix')
+                .data([asix.map(function(d){
+                        return [d[0][0] + w2 + px[0], d[0][1] + h2 + px[1]];
+                    }), asix[xLength + 1].map(function(d){
+                        return [d[0] + w2 + px[0], d[1] + h2 + px[1]];
+                    })]
+                , function(d, i) {
+                    return i;
+                })
+            ;
+            asix.enter()
+                .append('g')
+                .attr('class', 'asix')
+                .append('path')
+            ;
+            asix = asix.selectAll('path')
+                .datum(function() {
+                    return this.parentNode.__data__
+                });
+
+            (trans
+                ? asix
+                    .transition()
+                    .delay(trans.delay())
+                    .duration(trans.duration())
+                : asix
+            ).attr('d', function(d) {
+                var path = "", l;
+                if (!d || !(l = d.length))
+                    return path;
+                path = "M" + d[0][0] + ',' + d[0][1];
+                for(var i = 1; i < l; i++)
+                    path += "L" + d[i][0] + ',' + d[i][1];
+                return path;
             });
-            if (trans) {
-                dr = dr.transition().delay(trans.delay()).duration(trans.duration());
-            }
-            dr.attr("d", function (d) {
-                return d.path;
-            });
+
+            node.selectAll('g.asix')
+                .each(function(d, i) {
+                    asix = d3.select(this)
+                        .selectAll('g.asix-text')
+                        .data(d.slice(2).map(function(k, j) {
+                            return {
+                                point : k,
+                                name : j >= (i ? yLength - 1 : xLength - 1)
+                                    ? ""
+                                    : i
+                                        ? originalData[0][yLength - j - 2].year
+                                        : originalData[xLength - j - 2][0].name
+                            }
+                        }), function(k) {
+                            return k.name
+                        })
+                    ;
+                    gs = asix.enter()
+                        .append("g")
+                        .attr("class", "asix-text")
+                        .attr("transform", "translate(" + [w2, h2] + ")")
+                    ;
+                    gs.append("circle")
+                        .attr("r", 2)
+                    ;
+                    gs.append('text')
+                        .attr("text-anchor", "end")
+                        .attr("dx", "-.3em")
+                        .attr("dy", ".35em")
+                        .text(function(d, j) {
+                            return d.name
+                        })
+                    ;
+                    asix.exit().remove();
+
+                    (trans
+                        ? asix.transition()
+                            .delay(trans.delay())
+                            .duration(trans.duration())
+                        : asix
+                    ).attr("transform", function(d) {
+                            return "translate(" + d.point + ")"
+                    });
+                });
             trans = false;
         };
 
@@ -208,6 +406,71 @@
         };
 
         /**
+         * @param {CellIdCallback} [callback]
+         * @returns {Surface|Function}
+         * @see CellIdCallback
+         */
+        this.surfaceCellId = function (callback) {
+            if(!arguments.length)
+                return cellIdFunction;
+
+            cellIdFunction = callback;
+            if (timer)
+                clearTimeout(timer);
+            timer = setTimeout(renderSurface, 0);
+            return this;
+        };
+
+        /**
+         * @param {ItemCallback} [callback]
+         * @returns {Surface|Function}
+         * @see ItemCallback
+         */
+        this.surfaceCellOver = function (callback) {
+            if(!arguments.length)
+                return cellOverFunction;
+
+            cellOverFunction = callback;
+            if (timer)
+                clearTimeout(timer);
+            timer = setTimeout(renderSurface, 0);
+            return this;
+        };
+
+        /**
+         * @param {ItemCallback} [callback]
+         * @returns {Surface|Function}
+         * @see ItemCallback
+         */
+        this.surfaceCellOut = function (callback) {
+            if(!arguments.length)
+                return cellOutFunction;
+
+            cellOutFunction = callback;
+            if (timer)
+                clearTimeout(timer);
+            timer = setTimeout(renderSurface, 0);
+            return this;
+        };
+
+        /**
+         * @param {ItemCallback} [callback]
+         * @returns {Surface|Function}
+         * @see ItemCallback
+         */
+        this.surfaceCellMove = function (callback) {
+            if(!arguments.length)
+                return cellMoveFunction;
+
+            cellMoveFunction = callback;
+            if (timer)
+                clearTimeout(timer);
+            timer = setTimeout(renderSurface, 0);
+            return this;
+        };
+
+
+        /**
          * @returns {d3.selection.transition}
          */
         this.transition = function () {
@@ -220,6 +483,19 @@
 
             /** @lends Surface */
             transition.surfaceColor = this.surfaceColor;
+
+            /** @lends Surface */
+            transition.surfaceCellId = this.surfaceCellId;
+
+            /** @lends Surface */
+            transition.surfaceCellOver = this.surfaceCellOver;
+
+            /** @lends Surface */
+            transition.surfaceCellOut = this.surfaceCellOut;
+
+            /** @lends Surface */
+            transition.surfaceCellMove = this.surfaceCellMove;
+
             trans = transition;
             return transition;
         };
@@ -282,6 +558,14 @@
 
         //** @lends Surface */
         this.surfaceHeight = surface.surfaceHeight;
+
+        this.surfaceCellId = surface.surfaceCellId;
+
+        this.surfaceCellOver = surface.surfaceCellOver;
+
+        this.surfaceCellOut = surface.surfaceCellOut;
+
+        this.surfaceCellMove = surface.surfaceCellMove;
 
         //** @lends Surface */
         this.zoom = surface.setZoom;

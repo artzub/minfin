@@ -38,10 +38,9 @@ layers.Surface = function(options) {
         , vis
         , height
         , width
-        , maxHeight = 200
         , groups = {}
         , yaw = .5
-        , pitch = .5
+        , pitch = .3
         , drag
         ;
 
@@ -73,9 +72,11 @@ layers.Surface = function(options) {
 
         that.div.on("mousedown", function () {
                 drag = [d3.mouse(this), yaw, pitch];
+                that.div.style('cursor', 'move')
             })
             .on("mouseup", function () {
                 drag = false;
+                that.div.style('cursor', null)
             })
             .on("mousemove", function () {
                 if (!drag)
@@ -138,49 +139,15 @@ layers.Surface = function(options) {
     };
 
     /**
-     * @param {Number} [value]
-     * @returns {layers.Surface|Number}
-     */
-    that.maxHeight = function(value) {
-        if(!arguments.length)
-            return maxHeight;
-        maxHeight = +value;
-        return that;
-    };
-
-    function surfaceHeight(d) {
-        return -d * maxHeight;
-    }
-
-    function getSurfaceColor(name) {
-        return function(d) {
-            var arr = Object.keys(groups);
-            var ind = arr.indexOf(name);
-
-            var h = arr.length > 1 ? 300/(arr.length || 0) * ind : 210;
-
-            var c = d3.hsl(h, 1, d).rgb();
-            return "rgba(" + parseInt(c.r) + "," + parseInt(c.g) + "," + parseInt(c.b) + ",.8)";
-        }
-    }
-
-    function surfaceColor(d) {
-        //(-d * maxHeight + 100)
-        var i = Object.keys(groups).length;
-
-        var c = d3.hsl(210, 1, 1 - d).rgb();
-        return "rgba(" + parseInt(c.r) + "," + parseInt(c.g) + "," + parseInt(c.b) + ",.5)";
-    }
-
-    /**
      * @param name
      * @param {Array<Array<Number>>} matrix
      * @param {boolean} [multi=false]
-     * @returns {layers.Surface}
+     * @returns {GroupItem|Null}
+     * @see GroupItem
      */
     that.appendSurface = function(name, matrix, multi) {
         if(!that.div)
-            return that;
+            return null;
 
         //that.removeByName(name);
         var g;
@@ -206,13 +173,7 @@ layers.Surface = function(options) {
             .surface3D(width, height)
             .setTurntable(yaw, pitch)
         ;
-        groups[name].surface
-            .transition()
-            .duration(500)
-            .surfaceHeight(surfaceHeight)
-            .surfaceColor(getSurfaceColor(name))
-        ;
-
+        return groups[name];
     };
 
     /**

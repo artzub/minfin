@@ -156,7 +156,7 @@ svg {
 
 .node text {
     fill: #fff;
-    font-size: 11px;
+    font-size: 14px;
 }
 
 path.link {
@@ -185,6 +185,9 @@ path.link {
 #surfaceContainer {
     width: 100%;
     z-index: 0;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
 }
 
 #surfaceContainer path {
@@ -219,4 +222,31 @@ path.link {
 #metricsContainer li:hover {
     text-shadow: 1px 1px rgba(226, 243, 255, .8);
     box-shadow: inset 0 0 10px rgba(226, 243, 255, .5);
+}
+
+#surfaceContainer circle {
+    stroke: #444;
+    stroke-width: 1;
+    fill: #000;
+    cursor: help;
+}
+
+#surfaceContainer .asix circle {
+    stroke: #444;
+    stroke-width: 1;
+    fill: #e0e0df;
+    cursor: help;
+}
+
+#surfaceContainer .asix text  {
+    stroke: none;
+    stroke-width: 1;
+    fill: #e0e0df;
+    cursor: help;
+}
+
+#surfaceContainer .asix path {
+    stroke: #ffc5e3;
+    stroke-width: 5;
+    fill: none;
 }
