@@ -111,6 +111,7 @@
             if (!heightFunction || !data || !data.length || !data[0] || !data[0].length)
                 return [[]];
             var t, a, k, kx, ky
+                , km, am
                 , output = []
                 , heights = getHeights(data)
                 , x, y
@@ -120,7 +121,7 @@
             x = xLength;
             a = Math.min(displayWidth, displayHeight) || 1;
             k = 1; //1.41
-            kx = a*k/xLength;
+            kx = a*k/(xLength);
             ky = a*k/yLength;
             while(x--) {
                 t = [];
@@ -146,9 +147,10 @@
                 ;
             a = Math.min(displayWidth, displayHeight) || 1;
             k = 1; //1.41
-            kx = a*k/xLength;
+            kx = a*k/(xLength);
             ky = a*k/yLength;
-            var min = lx <= ly ? 1 : 0;
+            var km = Math.min(kx, ky);
+            var am = km == ky;
             var valx, valy;
             for(x = -1; x < lx; x++) {
                 t = [];
@@ -156,6 +158,16 @@
                 for(y = -1; y < ly; y++) {
                     valx = (x - xLength/2) * kx * zoom;
                     valy = (y - yLength/2) * ky * zoom;
+
+                    //TODO that a shit 1.8??? Need fix it!!!
+                    if (x < 0 || !(xLength - x)) {
+                        valx *= km/kx * (!am ? 1 : 1.8);
+                    }
+
+                    if (y < 0 || !(yLength - y)) {
+                        valy *= km/ky * (am ? 1 : 1.8);
+                    }
+
 
                     t.push(transformPoint([valx, 0, valy]));
                 }
@@ -167,45 +179,37 @@
             return colorFunction ? colorFunction(d.data) : null;
         };
 
-        /**
-         * Rending surface
-         * @function
-         * @memberOf {Surface}
-         */
-        var renderSurface = function () {
-            var originalData = node.datum()
-                , data = getTransformedData(originalData)
-                , xLength = data.length
-                , yLength = data[0].length
-                , d, d0 = []
-                , w2 = displayWidth/2
-                , h2 = displayHeight/2
+        function drawCells(data, originData, xLength, yLength, w2, h2) {
+            var d, d0 = [], d1 = new Array(xLength - 1)
                 , x, y, px, py, dpx, dpy
+                , d1px = w2, d1py = h2
                 , depth
-                , asix = getAsix(xLength, yLength)
             ;
 
             for (x = 0; x < xLength - 1; x++) {
+
+                d1[x] = d1[x] || [];
+
                 for (y = 0; y < yLength - 1; y++) {
                     depth = data[x][y][2]
-                        + data[x + 1][y][2]
-                        + data[x + 1][y + 1][2]
-                        + data[x][y + 1][2]
+                    + data[x + 1][y][2]
+                    + data[x + 1][y + 1][2]
+                    + data[x][y + 1][2]
                     ;
                     px = data[x][y][0] + w2;
                     py = data[x][y][1] + h2;
                     dpx = w2 - px;
                     dpy = h2 - py;
-                    d = originalData[x][y];
+                    d = originData[x][y];
 
                     d0.push({
                         path: 'M0,0'
-                            + 'L' + (data[x + 1][y][0] + dpx).toFixed(10)
-                            + ',' + (data[x + 1][y][1] + dpy).toFixed(10)
-                            + 'L' + (data[x + 1][y + 1][0] + dpx).toFixed(10)
-                            + ',' + (data[x + 1][y + 1][1] + dpy).toFixed(10)
-                            + 'L' + (data[x][y + 1][0] + dpx).toFixed(10)
-                            + ',' + (data[x][y + 1][1] + dpy).toFixed(10) + 'Z'
+                        + 'L' + (data[x + 1][y][0] + dpx).toFixed(10)
+                        + ',' + (data[x + 1][y][1] + dpy).toFixed(10)
+                        + 'L' + (data[x + 1][y + 1][0] + dpx).toFixed(10)
+                        + ',' + (data[x + 1][y + 1][1] + dpy).toFixed(10)
+                        + 'L' + (data[x][y + 1][0] + dpx).toFixed(10)
+                        + ',' + (data[x][y + 1][1] + dpy).toFixed(10) + 'Z'
                         , depth: depth
                         , point: [px.toFixed(10), py.toFixed(10)]
                         , data: d
@@ -213,12 +217,22 @@
                             ? cellIdFunction(d, x, y)
                             : [x, y].join('')
                     });
+
+                    d1[x].id = d1[x].id || d.name;
+
+                    if (!d1[x].length) {
+                        d1[x].push([px, py]);
+                        d1px = w2 - px;
+                        d1py = h2 - py;
+                    }
+                    d1[x].push([data[x][y + 1][0] + d1px, data[x][y + 1][1] + d1py]);
                 }
             }
 
+            //start cells
             var dr = node.selectAll('g.cell')
                 .data(d0, svg.getId)
-                ;
+            ;
 
             var gs = dr.enter()
                 .append('g')
@@ -229,17 +243,13 @@
                 .attr('transform', 'translate(' + [w2, h2] + ')')
             ;
             gs.append("path");
-            gs.append("circle").attr('r', 2.5);
 
             dr.selectAll("path")
-                .datum(function() {
+                .datum(function () {
                     return this.parentNode.__data__
                 })
                 .attr("fill", svg.getPathColor)
             ;
-            /*dr.selectAll("cirlce")
-                .attr("fill", svg.getPathColor)
-            ;*/
 
             dr.exit().remove();
 
@@ -256,18 +266,99 @@
                 .selectAll("path")
                 .attr("d", svg.getPath)
             ;
+            //end cells
 
-            //node.selectAll('g.asix').remove();
+            //start dots
+            dr = node.selectAll('g.dot')
+                    .data(d0, svg.getId)
+                ;
 
-            px = transformPoint([-0, 0, -0]);
+            gs = dr.enter()
+                    .append('g')
+                    .attr('class', 'dot')
+                    .on('mouseover', cellOverFunction)
+                    .on('mouseout', cellOutFunction)
+                    .on('mousemove', cellMoveFunction)
+                    .attr('transform', 'translate(' + [w2, h2] + ')')
+                ;
+            gs.append("circle").attr('r', 2.5);
+
+            dr.exit().remove();
+
+            dr.sort(svg.getSort);
+
+            dr = trans
+                ? dr.transition()
+                .delay(trans.delay())
+                .duration(trans.duration())
+                : dr
+            ;
+
+            dr.attr("transform", svg.getTranslate);
+            //end dots
+
+            dr = node.selectAll('g.edge')
+                .data(d1, svg.getId)
+            ;
+
+            dr.enter()
+                .append('g')
+                .attr('class', 'edge')
+                .attr('transform', 'translate(' + [w2, h2] + ')')
+                .append('path')
+                .attr("d", function(d) {
+                    var path = "M0,0";
+                    var arr = d.slice(1).reverse();
+                    var i = arr.length;
+                    while(i--) {
+                        path += "L" + [0, 0];
+                    }
+                    return path;
+                })
+            ;
+
+            dr.selectAll('path')
+                .datum(function () {
+                    return this.parentNode.__data__
+                });
+
+            dr.exit().remove();
+
+            dr = trans
+                ? dr.transition()
+                .delay(trans.delay())
+                .duration(trans.duration())
+                : dr
+            ;
+
+            dr.attr("transform", function(d) {
+                return "translate(" + d[0] + ")";
+            }).selectAll('path')
+                .attr("d", function(d) {
+                    var path = "M0,0";
+                    var arr = d.slice(1).reverse();
+                    var i = arr.length;
+                    while(i--) {
+                        path += "L" + arr[i];
+                    }
+                    return path;
+                })
+                ;
+
+        }
+
+        function drawAsix(originData, xLength, yLength, w2, h2) {
+            var px = transformPoint([-0, 0, -0]);
+
+            var asix = getAsix(xLength, yLength);
 
             asix = node.selectAll('g.asix')
-                .data([asix.map(function(d){
-                        return [d[0][0] + w2 + px[0], d[0][1] + h2 + px[1]];
-                    }), asix[xLength + 1].map(function(d){
-                        return [d[0] + w2 + px[0], d[1] + h2 + px[1]];
-                    })]
-                , function(d, i) {
+                .data([asix.map(function (d) {
+                    return [d[0][0] + w2 + px[0], d[0][1] + h2 + px[1]];
+                }), asix[xLength + 1].map(function (d) {
+                    return [d[0] + w2 + px[0], d[1] + h2 + px[1]];
+                })]
+                , function (d, i) {
                     return i;
                 })
             ;
@@ -277,48 +368,70 @@
                 .append('path')
             ;
             asix = asix.selectAll('path')
-                .datum(function() {
+                .datum(function () {
                     return this.parentNode.__data__
                 });
 
             (trans
                 ? asix
-                    .transition()
-                    .delay(trans.delay())
-                    .duration(trans.duration())
+                .transition()
+                .delay(trans.delay())
+                .duration(trans.duration())
                 : asix
-            ).attr('d', function(d) {
-                var path = "", l;
-                if (!d || !(l = d.length))
+            ).attr('d', function (d) {
+                    var path = "", l;
+                    if (!d || !(l = d.length))
+                        return path;
+                    path = "M" + d[0][0] + ',' + d[0][1];
+                    for (var i = 1; i < l; i++)
+                        path += "L" + d[i][0] + ',' + d[i][1];
                     return path;
-                path = "M" + d[0][0] + ',' + d[0][1];
-                for(var i = 1; i < l; i++)
-                    path += "L" + d[i][0] + ',' + d[i][1];
-                return path;
-            });
+                });
 
             node.selectAll('g.asix')
-                .each(function(d, i) {
+                .each(function (d, i) {
                     asix = d3.select(this)
                         .selectAll('g.asix-text')
-                        .data(d.slice(2).map(function(k, j) {
+                        .data(d.slice(2).map(function (k, j) {
                             return {
-                                point : k,
-                                name : j >= (i ? yLength - 1 : xLength - 1)
+                                point: k,
+                                name: j >= (i ? yLength - 1 : xLength - 1)
                                     ? ""
                                     : i
-                                        ? originalData[0][yLength - j - 2].year
-                                        : originalData[xLength - j - 2][0].name
+                                    ? originData[0][yLength - j - 2].year
+                                    : originData[xLength - j - 2][0].name
                             }
-                        }), function(k) {
+                        }), function (k) {
                             return k.name
                         })
                     ;
-                    gs = asix.enter()
-                        .append("g")
-                        .attr("class", "asix-text")
-                        .attr("transform", "translate(" + [w2, h2] + ")")
-                    ;
+                    var gs = asix.enter()
+                            .append("g")
+                            .attr("class", "asix-text")
+                            .attr("transform", "translate(" + [w2, h2] + ")")
+                            .on('mouseover', function(k) {
+                                if(i)
+                                    return;
+                                node.selectAll('.edge path')
+                                    .filter(function(b) {
+                                        return b.id == k.name
+                                    })
+                                    .style('stroke-opacity', 1)
+                                    .style('stroke-width', '4px')
+                                ;
+                            })
+                            .on('mouseout', function(k) {
+                                if(i)
+                                    return;
+                                node.selectAll('.edge path')
+                                    .filter(function(b) {
+                                        return b.id == k.name
+                                    })
+                                    .style('stroke-opacity', null)
+                                    .style('stroke-width', null)
+                                ;
+                            })
+                        ;
                     gs.append("circle")
                         .attr("r", 2)
                     ;
@@ -326,7 +439,7 @@
                         .attr("text-anchor", "end")
                         .attr("dx", "-.3em")
                         .attr("dy", ".35em")
-                        .text(function(d, j) {
+                        .text(function (d, j) {
                             return d.name
                         })
                     ;
@@ -334,17 +447,41 @@
 
                     (trans
                         ? asix.transition()
-                            .delay(trans.delay())
-                            .duration(trans.duration())
+                        .delay(trans.delay())
+                        .duration(trans.duration())
                         : asix
-                    ).attr("transform", function(d) {
+                    ).attr("transform", function (d) {
                             return "translate(" + d.point + ")"
-                    });
+                        });
                 });
+        }
+
+        /**
+         * Rending surface
+         * @function
+         * @memberOf {Surface}
+         */
+        var renderSurface = function () {
+            var originData = node.datum()
+                , data = getTransformedData(originData)
+                , xLength = data.length
+                , yLength = data[0].length
+                , w2 = displayWidth/2
+                , h2 = displayHeight/2
+            ;
+
+            drawCells(data, originData, xLength, yLength, w2, h2);
+            drawAsix(originData, xLength, yLength, w2, h2);
             trans = false;
         };
 
         this.renderSurface = renderSurface;
+
+        this.colorize = function() {
+            node.selectAll(".cell path")
+                .attr("fill", svg.getPathColor);
+            return this;
+        };
 
         /**
          * @param yaw
@@ -496,6 +633,9 @@
             /** @lends Surface */
             transition.surfaceCellMove = this.surfaceCellMove;
 
+            /** @lends Surface */
+            transition.colorize = this.colorize;
+
             trans = transition;
             return transition;
         };
@@ -550,13 +690,10 @@
 
         var surface = this.node().__surface__;
 
-        //** @lends Surface */
         this.setTurntable = surface.setTurntable;
 
-        //** @lends Surface */
         this.surfaceColor = surface.surfaceColor;
 
-        //** @lends Surface */
         this.surfaceHeight = surface.surfaceHeight;
 
         this.surfaceCellId = surface.surfaceCellId;
@@ -567,18 +704,16 @@
 
         this.surfaceCellMove = surface.surfaceCellMove;
 
-        //** @lends Surface */
+        this.colorize = surface.colorize;
+
         this.zoom = surface.setZoom;
 
-        //** @lends Surface */
         this.setHeight = surface.setHeight;
         surface.setHeight(height);
 
-        //** @lends Surface */
         this.setWidth = surface.setWidth;
         surface.setWidth(width);
 
-        //** @lends Surface */
         this.transition = surface.transition.bind(surface);
         return this;
     };

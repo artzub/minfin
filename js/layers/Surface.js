@@ -68,7 +68,7 @@ layers.Surface = function(options) {
 
         that.clearAll();
 
-        resize();
+        that.resize();
 
         that.div.on("mousedown", function () {
                 drag = [d3.mouse(this), yaw, pitch];
@@ -96,7 +96,7 @@ layers.Surface = function(options) {
             })
         ;
 
-        d3.select(window).on('resize.treeBar', resize);
+        d3.select(window).on('resize.treeBar', that.resize);
     }
 
     /**
@@ -228,7 +228,10 @@ layers.Surface = function(options) {
         });
     };
 
-    function resize() {
+    /**
+     * Resize surface based on container size
+     */
+    that.resize = function() {
         width = that.container.node().clientWidth;
         height = that.container.node().clientHeight;
 

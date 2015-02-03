@@ -14,6 +14,11 @@ var layers = layers || {};
  */
 
 /**
+ * @callback ItemCallback
+ * @param d
+ */
+
+/**
  * @param {TreeBarOptions} [options]
  * @constructor
  * @implements layers.BaseLayer
@@ -23,6 +28,7 @@ layers.TreeBar = function(options) {
 
     var that = this
         , root
+        , baseParent
         , vis
         , i
         , margin = {
@@ -31,12 +37,18 @@ layers.TreeBar = function(options) {
             bottom : 20,
             top : 20
         }
-        ;
-    var height
+        , height
         , width
+        , colorFunction
+        , node
+        , selected
         ;
 
-    var dispatch = d3.dispatch('select');
+    var x = d3.scale.linear();
+
+    var y = d3.scale.linear();
+
+    var dispatch = d3.dispatch('select', 'mouseover', 'mouseout', 'mousemove');
 
     that = d3.rebind(that, dispatch, 'on');
 
@@ -44,14 +56,15 @@ layers.TreeBar = function(options) {
     layers.merge(options, that.options);
     that.options.margin = that.options.margin || margin;
 
-    var tree = d3.layout.tree()
-            .children(children)
-        , diagonal = d3.svg.diagonal()
-            .projection(function(d) { return [d.x, d.y]; })
-        ;
+    var partition = d3.layout.partition()
+        .children(children)
+        .sort(null)
+        .value(function(d) {
+            return d.metric;
+        });
 
     function children(d) {
-        return d.values;
+        return d.items;//d.values;
     }
 
     function onAdd(own) {
@@ -78,197 +91,157 @@ layers.TreeBar = function(options) {
         ;
         that.size([width, height]);
 
-        d3.select(document).on('resize.treeBar', resize);
+        d3.select(window).on('resize.treeBar', that.resize);
 
         root = null;
     }
 
-    function resize() {
-        tree.div &&
-            tree.size([
-                tree.div.node().clientWidth,
-                tree.div.node().clientHeight
-            ]);
+    function nodeColor(d) {
+        return colorFunction
+            ? typeof colorFunction === "function"
+                ? colorFunction(d)
+                : colorFunction
+            : null;
     }
 
-    function toggle(d) {
-        if (d.values) {
-            d._values = d.values;
-            d.values = null;
-        } else {
-            d.values = d._values;
-            d._values = null;
-        }
-    }
-
-    function depthFilter(d) {
-        return d.depth < 5 && d.hasOwnProperty('values')
-            && (!d.parent
-                || d.key != d.parent.key)
-            ;
-    }
-
-    function update(source) {
+    function updateNew(source) {
         if (!that.div)
             return;
 
-        var duration = d3.event && d3.event.altKey ? 5000 : 500;
+        var nodes = partition.nodes(source);//.filter(depthFilter).reverse();
 
-        var mb = that.options.margin.bottom;
-
-        // Compute the new tree layout.
-        var nodes = tree.nodes(root).filter(depthFilter).reverse();
-
-        // Update the nodes…
-        var node = vis.selectAll("g.node")
+        node = vis.selectAll("g.node")
             .data(nodes, function(d) {
-                d.y = height - (d.depth == 1 ? mb * .3 : (d.depth - 1) * (mb + 26));
-                return d.id || (d.id = ++i);
-            });
-
-        // Enter any new nodes at the parent's previous position.
-        var nodeEnter = node.enter().append("g")
-            .attr("class", "node")
-            .attr("transform", function(d) { return "translate(" + source.x0 + "," + source.y0 + ")"; })
-            .attr('title', function(d) {
-                return d.key;
+                return d.tree_id;
             })
-            .on("click", function(d) {
-                toggle(d);
-                update(d);
-                dispatch.select(d);
-            });
-
-        nodeEnter.append("rect");
-
-        nodeEnter.append("circle")
-            .attr("r", 1e-6)
-            .style("fill", function(d) {
-                return d._values ? "lightsteelblue" : "#fff";
-            });
-
-        nodeEnter.append("text")
-            .attr("dy", "1.2em")
-            //.attr("dx", ".95em")
-            .attr("text-anchor", "middle" /*function(d) { return d.values || d._values ? "middle" : "start"; }*/)
-            .text(function(d) {
-                return d.key.length > 5 && d.depth > 2
-                    ? d.key.substr(0, 5) + '...'
-                    : d.key;
-            })
-            .style("fill-opacity", 1e-6);
-
-        // Transition nodes to their new position.
-        var nodeUpdate = node.transition()
-            .duration(duration)
-            .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
-
-        nodeUpdate.select("circle")
-            .attr("r", 4.5)
-            .style("fill", function(d) {
-                return d._values && d != source ? "#919fb9" : "#fff";
-            });
-
-        nodeUpdate.select("text")
-            .style("fill-opacity", 1)
             ;
 
-        nodeUpdate.selectAll("rect")
-            .each(function(d, i) {
-                var text = d3.select(this.parentNode).select('text')
-                    .node()
-                    .getBBox()
-                    ;
-                d3.select(this).attr('height', text.height + 9)
-                .attr('width', text.width + 11)
-                .attr('x', -(text.width/2) - 5)
-                .attr('y', -1)
+        var gs = node.enter()
+            .append("g")
+            .attr("class", "node")
+            .on('click', clicked)
+            .on('mouseover', function(d) {
+                d3.select(this)
+                    .select('rect')
+                    .style('fill-opacity', .9)
+                dispatch.mouseover(d);
+            })
+            .on('mousemove', function(d) {
+                dispatch.mousemove(d);
+            })
+            .on('mouseout', function(d) {
+                d3.select(this)
+                    .select('rect')
+                    .style('fill-opacity', null)
+                dispatch.mouseout(d);
             })
         ;
 
-        // Transition exiting nodes to the parent's new position.
-        var nodeExit = node.exit().transition()
-            .duration(duration)
-            .attr("transform", function(d) { return "translate(" + source.x + "," + source.y + ")"; })
-            .remove();
-
-        nodeExit.select("circle")
-            .attr("r", 1e-6);
-
-        nodeExit.select("text")
-            .style("fill-opacity", 1e-6);
-
-        nodeExit.select("rect")
-            .attr('height', 1e-6)
-            .attr('width', 1e-6);
-
-        // Update the links…
-        var link = vis.selectAll("path.link")
-            .data(tree.links(nodes.filter(function(d) {
-                return d.key != "root";
-            })).filter(function(d) {
-                return d.target.depth < 5 && d.source.key != d.target.key;
-            }), function(d) { return d.target.id; });
-
-        // Enter any new links at the parent's previous position.
-        link.enter().insert("svg:path", "g")
-            .attr("class", "link")
-            .attr("d", function(d) {
-                var o = {x: source.x0, y: source.y0};
-                return diagonal({source: o, target: o});
+        gs.filter(function(d) {
+                return !d.children
             })
+            .on('click', null)
+            .style('cursor', 'help')
+        ;
+
+        gs.append('title')
+            .text(function(d) {
+                return d.key;
+            })
+        ;
+
+        gs.append('rect');
+
+        gs.append('text')
+            .attr("text-anchor", "middle")
+            .attr("class", "label")
+            .attr("dy", ".35em")
+            .text(function(d) { return d.key; })
+            .each(function() {
+                this.textWidth = this.getBBox().width;
+            })
+        ;
+
+        refreshNode();
+    }
+
+    function refreshNode() {
+        var trans = node
             .transition()
-            .duration(duration)
-            .attr("d", diagonal);
+            .duration(750)
+            .attr("transform", nodeTranslate)
+        ;
 
-        // Transition links to their new position.
-        link.transition()
-            .duration(duration)
-            .attr("d", diagonal);
+        trans.selectAll("rect")
+            .style("fill", nodeColor)
+            .attr("width", rectWidth)
+            .attr("height", rectHeight);
 
-        // Transition exiting nodes to the parent's new position.
-        link.exit().transition()
-            .duration(duration)
-            .attr("d", function(d) {
-                var o = {x: source.x, y: source.y};
-                return diagonal({source: o, target: o});
-            })
-            .remove();
+        trans.selectAll("text")
+            .attr("transform", textTranslate)
+            .style("display", textDisplay)
+        ;
+    }
 
-        // Stash the old positions for transition.
-        nodes.forEach(function(d) {
-            d.x0 = d.x;
-            d.y0 = d.y;
-        });
+    function nodeTranslate(d) {
+        return "translate(" + [x(d.x), y(d.y)] + ")";
+    }
 
-        return that;
+    function rectWidth(d) {
+        return x(d.x + d.dx) - x(d.x);
+    }
+
+    function rectHeight(d) {
+        return y(d.y + d.dy) - y(d.y);
+    }
+
+    function rectX(d) {
+        return x(d.x);
+    }
+
+    function rectY(d) {
+        return y(d.y);
+    }
+
+    function textTranslate(d) {
+        var w = rectWidth(d);
+        if (w > width && d.depth < root.depth && d == root.parent)
+            w = Math.abs(rectX(d)) + width/2;
+        else
+            w /= 2;
+        return "translate(" + (w) + "," + (rectHeight(d) / 2) + ")";
+    }
+
+    function textDisplay(d) {
+        return this.textWidth > rectWidth(d) - 4 ? "none" : null;
+    }
+
+    function clicked(d) {
+        x.domain([d.x, d.x + d.dx]);
+        y.domain([d.y, 1]).range([d.y ? 20 : 0, height]);
+
+        root = d;
+        dispatch.select(d);
+        refreshNode();
+    }
+
+    function getRoot(root) {
+        return !root.parent ? root : getRoot(root.parent);
     }
 
     /**
      * @param data
      * @returns {layers.TreeBar}
      */
-    that.data = function(data) {
-        i = 0;
-        root = {
-            key : 'root',
-            values : data,
-            x0 : width / 2,
-            y0 : height - (that.options.margin.bottom + 24)
-        };
+    that.data = function(data, selected) {
+        root = data;
 
-        function toggleAll(d) {
-            if (!d.values)
-                return;
-            d.values.forEach(toggleAll);
-            toggle(d);
-        }
+        var has = selected != root || !selected;
 
-        data.forEach(toggleAll);
-        var has = root.values && root.values.length ? root.values[0] : null;
-        has && toggle(has);
-        update(root);
-        has && dispatch.select(has);
+        selected = selected || root;
+
+        updateNew(root);
+        has && clicked(selected);
         return that;
     };
 
@@ -278,19 +251,35 @@ layers.TreeBar = function(options) {
      */
     that.size = function(size) {
         if (!arguments.length)
-            return tree.size();
+            return [width, height];
 
         var m = that.options.margin || margin;
 
         that.div && that.div
-            .attr("width", width)
-            .attr("height", height)
+            .attr("width", size[0])
+            .attr("height", size[1])
         ;
 
         width = size[0] - m.left - m.right;
         height = size[1] - m.top - m.bottom;
 
-        tree.size([width, height]);
+        x.range([0, width]);
+        y.range([0, height]);
+
+        root && updateNew(getRoot(root), root);
+        return that;
+    };
+
+    /**
+     * Set/get color or function for getting color
+     * @param {string|ItemCallback} value
+     * @returns {layers.TreeBar|ItemCallback}
+     * @see ItemCallback
+     */
+    that.color = function(value) {
+        if(!arguments.length)
+            return colorFunction;
+        colorFunction = value;
         return that;
     };
 
@@ -311,6 +300,17 @@ layers.TreeBar = function(options) {
         that.div && that.div.remove();
         that.div = null;
         return that;
+    };
+
+    /**
+     * Resize tree based on container size
+     */
+    that.resize = function () {
+        that.container &&
+        that.size([
+            that.container.node().clientWidth,
+            that.container.node().clientHeight
+        ]);
     };
 };
 

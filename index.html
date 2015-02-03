@@ -5,14 +5,26 @@
     <link rel="stylesheet" href="css/style.css"/>
 </head>
 <body>
-
     <div id="background" class="layer" data-z-index="0"></div>
     <div id="vis" class="layer" data-z-index="1"></div>
     <div id="ui" class="layer" data-z-index="2"></div>
+    <iframe id="zoomEvent" style="height: 0; width: 100%; z-index: -1; border: 1px solid transparent"></iframe>
 
+    <script id="templateCell" type="text/html">
+        <h1>{{name}}</h1>
+        <ul>
+            <li><span>Год: </span><span>{{year}}</span></li>
+            <li><span>Сумма (₽): </span><span class="{{colorClass}}">{{valueText}} <span>{{lastDelta}}</span></span></li>
+        </ul>
+    </script>
 
-    <script src="//cdnjs.cloudflare.com/ajax/libs/async/0.9.0/async.js"></script>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/d3/3.5.3/d3.js"></script>
+    <!--<script src="//cdnjs.cloudflare.com/ajax/libs/async/0.9.0/async.js"></script>-->
+    <!--<script src="//cdnjs.cloudflare.com/ajax/libs/d3/3.5.3/d3.js"></script>-->
+    <script src="bower_components/d3/d3.min.js"></script>
+    <script src="bower_components/async/lib/async.js"></script>
+
+    <script src="//cdn.rawgit.com/artzub/d3tooltipjs/master/tooltip.js"></script>
+
     <script src="js/lib/surface3d.js"></script>
     <script src="js/app/App.js"></script>
     <script src="js/app/DataLoader.js"></script>

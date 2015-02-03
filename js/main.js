@@ -10,7 +10,6 @@
         , tree
         , width = innerWidth
         , height = innerHeight
-        , maxHeight = 250
         , selectedMetric
         , selectedData
         , metrics = {
@@ -21,6 +20,7 @@
         }
         , colors = d3.scale.ordinal()
             .range(d3.range(50, 300, 20))
+        , yearReg = /^\d{4}$/
         ;
 
     var ui = d3.select('#ui')
@@ -29,11 +29,40 @@
         , metricsContainer = layers.layer({position: "top right"}).addTo(vis)
         , controls = layers.layer().addTo(ui)
         , bottomBar = layers.layer({position : "bottom left"}).addTo(ui)
+        , df = d3.format(",.2f")
         ;
+
+    var templateCell = d3.select("#templateCell").html();
+
+    var lastOver;
+    var tooltip = d3.helper.tooltip()
+        .padding(16)
+        .text(function(d) {
+            var delta;
+            if(!d || !d.data)
+                return "";
+
+            if (lastOver != d) {
+                if (lastOver && lastOver.data) {
+                    delta = d.data.value - lastOver.data.value
+                }
+                d.data.colorClass = delta > 0 ? "green" : delta < 0 ? "red" : "";
+                d.data.lastDelta = !delta ? "" : df(Math.abs(delta));
+                lastOver = d;
+            }
+            d.data.valueText = df(d.data.value);
+
+            return template(templateCell, d.data);
+        });
 
     function resize() {
         width = innerWidth;
         height = innerHeight;
+
+        tooltip.spaceWidth(width)
+            .spaceHeight(height);
+        //tree && tree.resize();
+        surface && surface.resize();
     }
 
     d3.select(window).on('resize', resize);
@@ -93,7 +122,6 @@
     function makeMatrix(metric, selected) {
         var result = {}
             , stack = []
-            , reg = /^\d{4}$/
             , d = selected
             , value
             , data
@@ -106,16 +134,16 @@
         data = safeValues(d);
         i = data.length;
 
-        var key = d.depth == 1
+        var key = d.depth == 0
             ? 'level'
-            : d.depth == 2
+            : d.depth == 1
             ? 'subLevel'
             : 'name'
         ;
 
         while(i--) {
             d = data[i];
-            if(reg.test(d.key)) {
+            if(yearReg.test(d.key)) {
                 d = safeValues(d)[0];
                 value = result[d[key]];
                 if(!value)
@@ -132,7 +160,7 @@
                     data : data,
                     i : i
                 });
-                if(d.depth > 2 && d.key == d.parent.key && safeValues(d.parent).length > 1)
+                if(d.depth > 1 && d.key == d.parent.key && safeValues(d.parent).length > 1)
                     break;
                 while((data = safeValues(d))[0].key == d.key) {
                     value = d.key;
@@ -160,7 +188,7 @@
         while(i--) {
             name = data[i];
             j = years.length;
-            stack[i] = new Array(j);
+            stack[i] = new Array(j + 1);
             while(j--) {
                 year = years[j];
                 value = result[name];
@@ -175,14 +203,16 @@
                         : 0
                 } : getZero(name, year);
             }
+            stack[i][stack[i].length - 1] = getZero(name, 0);
         }
         stack[stack.length - 1] = years.map(getZero);
+        stack[stack.length - 1].push(getZero());
 
         console.log(stack);
         return stack;
     }
 
-
+    var currentSurface;
     function makeSurface(d, multi) {
         selectedData = d;
 
@@ -194,15 +224,33 @@
         if (!selectedMetric)
             return;
 
-        surface.appendSurface(selectedMetric,
-            makeMatrix(selectedMetric, d), multi)
-            .surface
+        currentSurface = surface.appendSurface(
+            selectedMetric
+            , makeMatrix(selectedMetric, d)
+            , multi
+        ).surface
             .transition()
             .duration(500)
             .surfaceHeight(surfaceHeight)
             .surfaceColor(surfaceColor)
             .surfaceCellId(surfaceCellId)
+            .surfaceCellOver(surfaceCellOver)
+            .surfaceCellOut(surfaceCellOut)
+            .surfaceCellMove(tooltip.mousemove)
         ;
+    }
+
+    var hovered;
+    function surfaceCellOver(d) {
+        tooltip.mouseover(d);
+        hovered = d;
+        currentSurface.colorize();
+    }
+
+    function surfaceCellOut(d) {
+        tooltip.mouseout();
+        hovered = null;
+        currentSurface.colorize();
     }
 
     function surfaceCellId(d, x, y) {
@@ -215,8 +263,24 @@
 
     function surfaceColor(d) {
         var c = d.name ? colors(d.name) : 0;
-        c = d3.hsl(c, 1, d.name ? 0.5 + d.normalized/2 : 0).rgb();
+
+        var s = hovered && d.name !== hovered.data.name ? .3 : 1;
+        c = d3.hsl(c, s, d.name ? 0.5 + d.normalized/2 : 0).rgb();
         return "rgba(" + parseInt(c.r) + "," + parseInt(c.g) + "," + parseInt(c.b) + ",.5)";
+    }
+
+    function treeColor(d) {
+        var key = d.key
+            , l = 0
+            , mkey = "mv_" + selectedMetric
+            ;
+        if (yearReg.test(d.key)) {
+            key = d.parent.key;
+            l = d.parent[mkey] ? d.value / d.parent[mkey] : 0
+        }
+        var c = d.key ? colors(key) : 0;
+        c = d3.hsl(c, 1, .5 + l/2).rgb();
+        return "rgb(" + parseInt(c.r) + "," + parseInt(c.g) + "," + parseInt(c.b) + ")";
     }
 
     function initMetrics() {
@@ -251,6 +315,9 @@
                 d3.select(this).classed('selected', true);
 
                 selectedMetric = d;
+
+                selectedData && updateTree(selectedData);
+
                 selectedData && makeSurface(selectedData);
 
                 unsetWait();
@@ -277,10 +344,25 @@
                 setWait();
                 makeSurface(d);
                 unsetWait();
-            });
+            })
+            .on('mouseover', function(d) {
+                tooltip.mouseover(d);
+            })
+            .on('mouseout', function(d) {
+                tooltip.mouseout();
+            })
+            .on('mousemove', tooltip.mousemove)
+            ;
         }
+
         tree.addTo(treeContainer)
+            .color(treeColor)
             .data(data);
+    }
+
+    function updateTree(selected) {
+        rawData.values.forEach(restructure(rawData));
+        tree && tree.data(rawData, selected);
     }
 
     /**
@@ -367,10 +449,11 @@
                 return d.year && d.name != "Итого расходов";
             }))
         ;
-        data = [{
-            key : "Исторический бюджет",
-            values : data
-        }];
+        rawData = {
+            key : "История бюджета 1937 - 1950гг.",
+            values : data,
+            items : data
+        };
 
         hashNames = Object.keys(hashNames);
 
@@ -378,19 +461,57 @@
             .range(d3.range(0, 300, 500/(hashNames.length||1)))
             .domain(hashNames);
 
-        data.forEach(function t(d) {
-            if (!d.key)
-                return;
-            console.log(d.key);
-            d.values.forEach(t);
-        });
-
         progress.position(100)
             .title('Complete!')
         ;
 
         initMetrics(metrics);
-        initTree(data);
+
+        rawData.values.forEach(restructure(rawData));
+        initTree(rawData);
+    }
+
+    function restructure(parent) {
+        return function (d) {
+            if (!d.values)
+                return;
+
+            var maxMetricKey;
+
+            d.tree_id = d.key;
+
+            if (yearReg.test(d.key)) {
+                d.tree_id = parent.key + '_' + d.key;
+                d.metric = d.values[0][selectedMetric];
+
+                maxMetricKey = "mv_" + selectedMetric;
+
+                parent[maxMetricKey] = Math.max(d.metric
+                    , typeof parent[maxMetricKey] === "undefined"
+                        ? -Infinity
+                        : parent[maxMetricKey]
+                );
+                return;
+            }
+
+            var arr = d.values
+                , curParent = d
+                ;
+            if (d.key == parent.key) {
+                if (parent.items.length > 1) {
+                    d.metric = 0;
+                    return;
+                }
+
+                parent.items = arr;
+                curParent = parent;
+            }
+            else {
+                d.items = arr;
+            }
+
+            arr.forEach(restructure(curParent));
+        }
     }
 
     app.dataLoader({
@@ -412,4 +533,28 @@
     );
 
     resize();
+
+    // fixed zoom event
+
+    var timerResize;
+    d3.select(document.querySelector("#zoomEvent").contentWindow)
+        .on('resize', function() {
+            if(timerResize)
+                clearTimeout(timerResize);
+            timerResize = setTimeout(resize, 300);
+        })
+    ;
+
+    function template(template, item) {
+        if (!template || !item)
+            return "";
+
+        for(var key in item) {
+            if(!item.hasOwnProperty(key))
+                continue;
+            template = template.replace("{{" + key + "}}", item[key]);
+        }
+
+        return template;
+    }
 })();
