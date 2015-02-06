@@ -87,6 +87,8 @@ layers.Surface = function(options) {
                 pitch = drag[2] + (mouse[1] - drag[0][1]) / 50;
                 pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
 
+                console.log([yaw, pitch]);
+
                 Object.keys(groups).forEach(function(key) {
                     groups[key]
                         && groups[key].surface
@@ -97,6 +99,19 @@ layers.Surface = function(options) {
         ;
 
         d3.select(window).on('resize.treeBar', that.resize);
+    }
+
+    this.turntable = function(y, p) {
+        if (that.div)
+
+        yaw = y;
+        pitch = p;
+        Object.keys(groups).forEach(function(key) {
+            groups[key]
+            && groups[key].surface
+            && groups[key].surface.setTurntable(yaw, pitch)
+            ;
+        });
     }
 
     /**
