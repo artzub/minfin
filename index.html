@@ -2,12 +2,65 @@
 <html>
 <head lang="en">
     <meta charset="utf-8">
+    <link rel="shortcut icon" type="image/png" href="favicon.png"/>
     <link rel="stylesheet" href="css/style.css"/>
 </head>
 <body>
     <div id="background" class="layer" data-z-index="0"></div>
     <div id="vis" class="layer" data-z-index="1"></div>
     <div id="ui" class="layer" data-z-index="2"></div>
+    <div id="info" class="layer open" data-z-index="3">
+        <span class="io info"></span>
+        <div>
+            <h1>История бюджета 1937-1950гг.</h1>
+            <div>
+                В данной визуализации демонстрируется история бюджета.
+                <br/>
+                С возможностью просматривать значение той или иной статьи за период с 1937 по 1950 годы.<br/>
+                <br/>
+                Проект сделан на останове <a href="http://minfin.ru/ru/opendata/">открытых данных из МинФин</a>.<br/>
+                Для конкурса <a href="http://budgetapps.ru/contest">BudgetApp</a>.
+                <br/>
+                <br/>
+                Данная визуализация позволяет детализировать информацию по каждой статье.
+                <br/>
+                Для более наглядной демонстрации данных выбрана визуализация в виде <a href="http://en.wikipedia.org/wiki/Heat_map">heapmap</a> с тремя измерениями.
+                <br/>
+                <span class="gradient">
+                    <span></span><span></span><span></span><span></span><span></span><span></span>
+                </span>
+                <br/>
+                — Чем белее цвет тем больше значение.<br/>
+                — Как на 3д поверхности так и у значении годов в дереве статей, в нижней части экрана.
+                <br/>
+                — Так же высота демонстрирует туже тенденцию.
+                <br/><br/>
+
+                <h2>Как пользоваться.</h2>
+                <ul>
+                    <li>
+                        Для получения информации по ячейке наведите мышку на нее.<br/>
+                        Появиться всплывающая подсказка, с детальной информацией.<br/>
+                        Такое же поведение реализовано в дереве статей.
+                    </li>
+                    <li>
+                        Для просмотра heatmap конкретной статьи, необходимо кликнуть по ней в дереве статей.
+                    </li>
+                    <li>
+                        По умолчанию выбран показатель Итого по бюджетам, Вы может выбрать нужный в правом верхнем углу.
+                    </li>
+                    <li>
+                        Есть возможность вращать визуализацию по осям, для этого нажмите и удерживайте мышку при движении.
+                    </li>
+                    <li>Так же Вы может быстро переключить вид, для этого используйте кнопки справа.</li>
+                    <li>Дерево статей можно спрятать, кликнув по кнопке.</li>
+                </ul>
+            </div>
+            За основу взят скрипт <a href="http://bl.ocks.org/supereggbert/aff58196188816576af0">subface3d.js</a><br/>
+            Реализованно с помощью <a href="http://d3js.org">d3.js</a>, <a href="https://github.com/iconic/open-iconic/tree/master/png">open-iconic</a><br/>
+            © 2015 <a href="http://artzub.com" title="Artem Zubkov">Артём Зубков</a> (<a href="https://github.com/artzub/minfin">Исходный код на GitHub</a>).
+        </div>
+    </div>
     <iframe id="zoomEvent" style="height: 0; width: 100%; z-index: -1; border: 1px solid transparent"></iframe>
 
     <script id="templateCell" type="text/html">
@@ -18,10 +71,29 @@
         </ul>
     </script>
 
-    <!--<script src="//cdnjs.cloudflare.com/ajax/libs/async/0.9.0/async.js"></script>-->
-    <!--<script src="//cdnjs.cloudflare.com/ajax/libs/d3/3.5.3/d3.js"></script>-->
-    <script src="bower_components/d3/d3.min.js"></script>
-    <script src="bower_components/async/lib/async.js"></script>
+    <script id="templateTreeNode" type="text/html">
+        <h1>{{key}}</h1>
+        <ul>
+            <li><span>Мин. (₽): </span><span class="{{mincolorClass}}">{{minText}} <span>{{minlastDelta}}</span></span></li>
+            <li><span>Среднее (₽): </span><span class="{{midcolorClass}}">{{midText}} <span>{{midlastDelta}}</span></span></li>
+            <li><span>Макс. (₽): </span><span class="{{maxcolorClass}}">{{maxText}} <span>{{maxlastDelta}}</span></span></li>
+            <li><span>Сумма (₽): </span><span class="{{colorClass}}">{{valueText}} <span>{{lastDelta}}</span></span></li>
+        </ul>
+    </script>
+
+    <script id="controls" type="text/html">
+        <ul id="positions">
+            <li><span class="io expand-left"></span><span>Слева</span></li>
+            <li><span class="io expand-right"></span><span>Справ</span></li>
+            <li><span class="io expand-down"></span><span>С верху</span></li>
+            <li><span class="io loop"></span><span>Стартовая</span></li>
+        </ul>
+    </script>
+
+    <script src="//cdnjs.cloudflare.com/ajax/libs/async/0.9.0/async.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/d3/3.5.3/d3.js"></script>
+    <!--<script src="bower_components/d3/d3.min.js"></script>-->
+    <!--<script src="bower_components/async/lib/async.js"></script>-->
 
     <script src="//cdn.rawgit.com/artzub/d3tooltipjs/master/tooltip.js"></script>
 

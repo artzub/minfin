@@ -22,18 +22,55 @@
     var svg = {
         getId : function(d) {
             return d.id;
-        },
-        getTranslate : function(d) {
+        }
+        , getTranslate : function(d) {
             return "translate(" + d.point + ")";
-        },
-        getPath : function (d) {
+        }
+        , getPath : function (d) {
             return d.path;
-        },
-        getSort : function (a, b) {
+        }
+        , getSort : function (a, b) {
             return b.depth - a.depth
-        },
-        getColor : null
+        }
+        , getName : function (d) {
+            return d.name
+        }
+        , getTranslateForEdge : function(d) {
+            return "translate(" + d[0] + ")";
+        }
+        , getBasePathForEdge : function(d) {
+            var path = "M0,0";
+            var arr = d.slice(1).reverse();
+            var i = arr.length;
+            while(i--) {
+                path += "L" + [0, 0];
+            }
+            return path;
+        }
+        , getRealPathForEdge : function(d) {
+            var path = "M0,0";
+            var arr = d.slice(1).reverse();
+            var i = arr.length;
+            while(i--) {
+                path += "L" + arr[i];
+            }
+            return path;
+        }
+        , getPathForAsix : function (d) {
+            var path = "", l;
+            if (!d || !(l = d.length))
+                return path;
+            path = "M" + d[0][0] + ',' + d[0][1];
+            for (var i = 1; i < l; i++)
+                path += "L" + d[i][0] + ',' + d[i][1];
+            return path;
+        }
+        , getPathColor : null
     };
+
+    function parentDatum() {
+        return this.parentNode.__data__
+    }
 
     /**
      * @param {d3.selection} node
@@ -57,7 +94,7 @@
         /**
          * @returns {d3.selection}
          */
-        this.node = function() {
+        this.container = function() {
             return node;
         };
 
@@ -65,7 +102,9 @@
          * Set zoom level
          * @param {Number} zoomLevel
          */
-        this.setZoom = function (zoomLevel) {
+        this.zoom = function (zoomLevel) {
+            if (!arguments.length)
+                return zoom;
             zoom = zoomLevel;
             if (timer)
                 clearTimeout(timer);
@@ -144,30 +183,31 @@
                 , x, y
                 , xLength = lx++
                 , yLength = ly++
+                , xhl = xLength/2
+                , yhl = yLength/2
                 ;
             a = Math.min(displayWidth, displayHeight) || 1;
             k = 1; //1.41
             kx = a*k/(xLength);
             ky = a*k/yLength;
-            var km = Math.min(kx, ky);
-            var am = km == ky;
             var valx, valy;
             for(x = -1; x < lx; x++) {
                 t = [];
                 output.push(t);
                 for(y = -1; y < ly; y++) {
-                    valx = (x - xLength/2) * kx * zoom;
-                    valy = (y - yLength/2) * ky * zoom;
+                    valx = (x - xhl) * kx * zoom;
+                    valy = (y - yhl) * ky * zoom;
 
-                    //TODO that a shit 1.8??? Need fix it!!!
-                    if (x < 0 || !(xLength - x)) {
-                        valx *= km/kx * (!am ? 1 : 1.8);
+                    if (!(xLength - x))
+                        valx = (x -.8 - xhl) * kx * zoom;
+                    else if (x < 0)
+                        valx = (-.2 - xhl) * kx * zoom;
+
+                    if (!(yLength - y))
+                        valy = (y -.8 - yhl) * ky * zoom;
+                    if (y < 0) {
+                        valy = (-.2 - yhl) * ky * zoom;
                     }
-
-                    if (y < 0 || !(yLength - y)) {
-                        valy *= km/ky * (am ? 1 : 1.8);
-                    }
-
 
                     t.push(transformPoint([valx, 0, valy]));
                 }
@@ -245,13 +285,11 @@
             gs.append("path");
 
             dr.selectAll("path")
-                .datum(function () {
-                    return this.parentNode.__data__
-                })
+                .datum(parentDatum)
                 .attr("fill", svg.getPathColor)
             ;
 
-            dr.exit().remove();
+            dr.exit().style('display', "none");
 
             dr.sort(svg.getSort);
 
@@ -263,6 +301,7 @@
             ;
 
             dr.attr("transform", svg.getTranslate)
+                .style('display', null)
                 .selectAll("path")
                 .attr("d", svg.getPath)
             ;
@@ -283,7 +322,7 @@
                 ;
             gs.append("circle").attr('r', 2.5);
 
-            dr.exit().remove();
+            dr.exit().style('display', "none");
 
             dr.sort(svg.getSort);
 
@@ -294,7 +333,8 @@
                 : dr
             ;
 
-            dr.attr("transform", svg.getTranslate);
+            dr.style('display', null)
+                .attr("transform", svg.getTranslate);
             //end dots
 
             dr = node.selectAll('g.edge')
@@ -306,43 +346,25 @@
                 .attr('class', 'edge')
                 .attr('transform', 'translate(' + [w2, h2] + ')')
                 .append('path')
-                .attr("d", function(d) {
-                    var path = "M0,0";
-                    var arr = d.slice(1).reverse();
-                    var i = arr.length;
-                    while(i--) {
-                        path += "L" + [0, 0];
-                    }
-                    return path;
-                })
+                .attr("d", svg.getBasePathForEdge)
             ;
 
             dr.selectAll('path')
-                .datum(function () {
-                    return this.parentNode.__data__
-                });
+                .datum(parentDatum);
 
-            dr.exit().remove();
+            dr.exit().style('display', "none");
 
             dr = trans
                 ? dr.transition()
-                .delay(trans.delay())
-                .duration(trans.duration())
+                    .delay(trans.delay())
+                    .duration(trans.duration())
                 : dr
             ;
 
-            dr.attr("transform", function(d) {
-                return "translate(" + d[0] + ")";
-            }).selectAll('path')
-                .attr("d", function(d) {
-                    var path = "M0,0";
-                    var arr = d.slice(1).reverse();
-                    var i = arr.length;
-                    while(i--) {
-                        path += "L" + arr[i];
-                    }
-                    return path;
-                })
+            dr.style('display', null)
+                .attr("transform", svg.getTranslateForEdge)
+                .selectAll('path')
+                .attr("d", svg.getRealPathForEdge)
                 ;
 
         }
@@ -368,9 +390,7 @@
                 .append('path')
             ;
             asix = asix.selectAll('path')
-                .datum(function () {
-                    return this.parentNode.__data__
-                });
+                .datum(parentDatum);
 
             (trans
                 ? asix
@@ -378,82 +398,83 @@
                 .delay(trans.delay())
                 .duration(trans.duration())
                 : asix
-            ).attr('d', function (d) {
-                    var path = "", l;
-                    if (!d || !(l = d.length))
-                        return path;
-                    path = "M" + d[0][0] + ',' + d[0][1];
-                    for (var i = 1; i < l; i++)
-                        path += "L" + d[i][0] + ',' + d[i][1];
-                    return path;
-                });
+            ).attr('d', svg.getPathForAsix);
 
-            node.selectAll('g.asix')
-                .each(function (d, i) {
-                    asix = d3.select(this)
-                        .selectAll('g.asix-text')
-                        .data(d.slice(2).map(function (k, j) {
-                            return {
-                                point: k,
-                                name: j >= (i ? yLength - 1 : xLength - 1)
-                                    ? ""
-                                    : i
-                                    ? originData[0][yLength - j - 2].year
-                                    : originData[xLength - j - 2][0].name
-                            }
-                        }), function (k) {
-                            return k.name
-                        })
-                    ;
-                    var gs = asix.enter()
-                            .append("g")
-                            .attr("class", "asix-text")
-                            .attr("transform", "translate(" + [w2, h2] + ")")
-                            .on('mouseover', function(k) {
-                                if(i)
-                                    return;
-                                node.selectAll('.edge path')
-                                    .filter(function(b) {
-                                        return b.id == k.name
-                                    })
-                                    .style('stroke-opacity', 1)
-                                    .style('stroke-width', '4px')
-                                ;
-                            })
-                            .on('mouseout', function(k) {
-                                if(i)
-                                    return;
-                                node.selectAll('.edge path')
-                                    .filter(function(b) {
-                                        return b.id == k.name
-                                    })
-                                    .style('stroke-opacity', null)
-                                    .style('stroke-width', null)
-                                ;
-                            })
-                        ;
-                    gs.append("circle")
-                        .attr("r", 2)
-                    ;
-                    gs.append('text')
-                        .attr("text-anchor", "end")
-                        .attr("dx", "-.3em")
-                        .attr("dy", ".35em")
-                        .text(function (d, j) {
-                            return d.name
-                        })
-                    ;
-                    asix.exit().remove();
+            node.selectAll('g.asix').each(function(d, i) {
+                var that = d3.select(this)
+                    .selectAll('g.asix-text')
+                    .data(d.slice(2).map(function (k, j) {
+                        return {
+                            point: k,
+                            name: j >= (i ? yLength - 1 : xLength - 1)
+                                ? ""
+                                : i
+                                ? originData[0][yLength - j - 2].year
+                                : originData[xLength - j - 2][0].name
+                        }
+                    }), function (k) {
+                        return k.name
+                    });
+                asixAppend.apply(that, [i]);
+            });
+        }
 
-                    (trans
-                        ? asix.transition()
-                        .delay(trans.delay())
-                        .duration(trans.duration())
-                        : asix
-                    ).attr("transform", function (d) {
-                            return "translate(" + d.point + ")"
-                        });
-                });
+        function overEdgeByKey(key) {
+            node.selectAll('.edge path')
+                .filter(function(b) {
+                    return b.id == key
+                })
+                .style('stroke-opacity', 1)
+                .style('stroke-width', '4px')
+            ;
+        }
+
+        function outEdge() {
+            node.selectAll('.edge path')
+                .style('stroke-opacity', null)
+                .style('stroke-width', null)
+            ;
+        }
+
+        /**
+         * @param i
+         * @this d3.selection
+         */
+        function asixAppend(i) {
+            var asix = this;
+            var gs = asix.enter()
+                .append("g")
+                .attr("class", "asix-text")
+                .attr("transform", "translate(" + [displayWidth/2, displayHeight/2] + ")")
+                .on('mouseover', function(k) {
+                    !i && overEdgeByKey(k.name);
+                })
+                .on('mouseout', function(k) {
+                    !i && outEdge();
+                })
+            ;
+            gs.append("circle").attr("r", 2);
+            gs.append('text')
+                .attr("text-anchor", function() {
+                    return i ? "middle" : "end";
+                })
+                .attr("dx", function() {
+                    return i ? ".3em" : "-.3em";
+                })
+                .attr("dy", function() {
+                    return i ? "1em" : ".35em";
+                })
+                .text(svg.getName)
+            ;
+
+            asix.exit().remove();
+
+            (trans
+                ? asix.transition()
+                .delay(trans.delay())
+                .duration(trans.duration())
+                : asix
+            ).attr("transform", svg.getTranslate);
         }
 
         /**
@@ -477,9 +498,21 @@
 
         this.renderSurface = renderSurface;
 
+        /**
+         * @returns {Surface}
+         */
         this.colorize = function() {
             node.selectAll(".cell path")
                 .attr("fill", svg.getPathColor);
+            return this;
+        };
+
+        /**
+         * @param key
+         * @returns {Surface}
+         */
+        this.highlightEdgeByKey = function(key) {
+            key ? overEdgeByKey(key) : outEdge();
             return this;
         };
 
@@ -615,26 +648,9 @@
             colorFunction = null;
             heightFunction = null;
 
-            /** @lends Surface */
-            transition.surfaceHeight = this.surfaceHeight;
-
-            /** @lends Surface */
-            transition.surfaceColor = this.surfaceColor;
-
-            /** @lends Surface */
-            transition.surfaceCellId = this.surfaceCellId;
-
-            /** @lends Surface */
-            transition.surfaceCellOver = this.surfaceCellOver;
-
-            /** @lends Surface */
-            transition.surfaceCellOut = this.surfaceCellOut;
-
-            /** @lends Surface */
-            transition.surfaceCellMove = this.surfaceCellMove;
-
-            /** @lends Surface */
-            transition.colorize = this.colorize;
+            for(var key in this)
+                if(this.hasOwnProperty(key))
+                    transition[key] = this[key];
 
             trans = transition;
             return transition;
@@ -688,32 +704,16 @@
              */
             this.node().__surface__ = new Surface(this);
 
-        var surface = this.node().__surface__;
+        var surface = this.node().__surface__
+            , key
+            ;
 
-        this.setTurntable = surface.setTurntable;
+        for(key in surface)
+            if(surface.hasOwnProperty(key))
+                this[key] = surface[key];
 
-        this.surfaceColor = surface.surfaceColor;
-
-        this.surfaceHeight = surface.surfaceHeight;
-
-        this.surfaceCellId = surface.surfaceCellId;
-
-        this.surfaceCellOver = surface.surfaceCellOver;
-
-        this.surfaceCellOut = surface.surfaceCellOut;
-
-        this.surfaceCellMove = surface.surfaceCellMove;
-
-        this.colorize = surface.colorize;
-
-        this.zoom = surface.setZoom;
-
-        this.setHeight = surface.setHeight;
         surface.setHeight(height);
-
-        this.setWidth = surface.setWidth;
         surface.setWidth(width);
-
         this.transition = surface.transition.bind(surface);
         return this;
     };

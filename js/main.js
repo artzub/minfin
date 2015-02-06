@@ -26,34 +26,126 @@
     var ui = d3.select('#ui')
         , vis = d3.select('#vis').append('div')
         , surfaceContainer = layers.layer().addTo(vis)
-        , metricsContainer = layers.layer({position: "top right"}).addTo(vis)
-        , controls = layers.layer().addTo(ui)
+        , metricsContainer = layers.layer({position: "top right menu"}).addTo(vis)
+        , controls = layers.layer({position: "top right menu"}).addTo(ui)
         , bottomBar = layers.layer({position : "bottom left"}).addTo(ui)
         , df = d3.format(",.2f")
         ;
 
-    var templateCell = d3.select("#templateCell").html();
+    var templateCell = d3.select("#templateCell").html()
+        , templateTreeNode = d3.select("#templateTreeNode").html()
+        ;
 
-    var lastOver;
+    var lastOver = {
+        cell : {}
+        , node : {}
+        , year : {}
+    };
     var tooltip = d3.helper.tooltip()
         .padding(16)
         .text(function(d) {
-            var delta;
-            if(!d || !d.data)
-                return "";
-
-            if (lastOver != d) {
-                if (lastOver && lastOver.data) {
-                    delta = d.data.value - lastOver.data.value
-                }
-                d.data.colorClass = delta > 0 ? "green" : delta < 0 ? "red" : "";
-                d.data.lastDelta = !delta ? "" : df(Math.abs(delta));
-                lastOver = d;
-            }
-            d.data.valueText = df(d.data.value);
-
-            return template(templateCell, d.data);
+            return d
+                ? d.data
+                    ? textForCell(d)
+                    : d.key
+                        ? yearReg.test(d.key)
+                            ? textForTreeNodeYear(d)
+                            : textForTreeNode(d)
+                        : ""
+                : ""
         });
+
+    function textForTreeNodeYear(d) {
+        var delta;
+        if(!d)
+            return "";
+
+        if (lastOver.node != d) {
+            if (lastOver.node) {
+                delta = d.value - lastOver.node.value
+            }
+            d.colorClass = !delta ? "" : delta > 0 ? "green" : "red";
+            d.lastDelta = !delta ? "" : df(Math.abs(delta));
+            lastOver.node = d;
+        }
+        d.valueText = df(d.value);
+        d.name = d.tree_id.replace('_' + d.key, '');
+        d.year = d.key;
+
+        return template(templateCell, d);
+    }
+
+    function textForTreeNode(d) {
+        var delta = {
+                min : 0,
+                max : 0,
+                mid : 0,
+                value : 0
+            }, data
+            , max = -Infinity
+            , min = Infinity
+            ;
+        if(!d)
+            return "";
+
+        var k = d;
+        while((data = safeValues(k))[0].key == k.key)
+            k = data[0];
+        d.midValue = d3.mean(data, function(k) {
+            var value = k.hasOwnProperty('value')
+                ? k.value
+                : yearReg.test(k.key)
+                    ? k.values[0][selectedMetric]
+                    : 0
+                ;
+            max = Math.max(value, max);
+            min = Math.min(value, min);
+            return value;
+        });
+
+        d.minValue = min;
+        d.maxValue = max;
+
+        var key, keyObj;
+
+        if (lastOver.node != d) {
+            for(key in delta) {
+                if(!delta.hasOwnProperty(key))
+                    continue;
+                keyObj = key == "value" ? key : key + "Value";
+                if (lastOver.node)
+                    delta[key] = d[keyObj] - lastOver.node[keyObj];
+
+                key = key == "value" ? "" : key;
+                d[key + 'colorClass'] = !delta[key || "value"] ? "" : delta[key || "value"] > 0 ? "green" : "red";
+                d[key + 'lastDelta'] = !delta[key || "value"] ? "" : df(Math.abs(delta[key || "value"]));
+            }
+            lastOver.node = d;
+        }
+        for(key in delta)
+            if(delta.hasOwnProperty(key))
+                d[key + 'Text'] = df(d[key == "value" ? key : key + "Value"]);
+
+        return template(templateTreeNode, d);
+    }
+
+    function textForCell(d) {
+        var delta;
+        if(!d || !d.data)
+            return "";
+
+        if (lastOver.cell != d) {
+            if (lastOver.cell && lastOver.cell.data) {
+                delta = d.data.value - lastOver.cell.data.value
+            }
+            d.data.colorClass = delta > 0 ? "green" : delta < 0 ? "red" : "";
+            d.data.lastDelta = !delta ? "" : df(Math.abs(delta));
+            lastOver.cell = d;
+        }
+        d.data.valueText = df(d.data.value);
+
+        return template(templateCell, d.data);
+    }
 
     function resize() {
         width = innerWidth;
@@ -72,11 +164,35 @@
         .classed('override', true)
     ;
 
+    function toggleBar() {
+        bottomBar.container.classed("open", !bottomBar.container.classed("open"));
+    }
+
+    bottomBar.div.append("span").attr("class", "before").on('click', toggleBar);
+
+    setTimeout(toggleBar, 2000);
+
+    bottomBar = layers.layer().addTo(bottomBar.div);
+
+    var treeContainer = bottomBar.div
+        .append('div')
+        .style({
+            'position': 'absolute',
+            'width': '100%',
+            //'bottom': '4px',
+            'height': '176px'
+        })
+        .attr('class', 'left top')
+    ;
+
     var progress = layers.progressBar().addTo(
         bottomBar.div
             .append('div')
-            .style('position', 'absolute')
-            .style('width', '100%')
+            .style({
+                'position' : 'absolute'
+                , 'width' : '100%'
+                , 'bottom' : '13px'
+            })
             .attr('class', 'left bottom')
     );
 
@@ -84,19 +200,10 @@
         .style('height', '4px')
     ;
 
-    var treeContainer = bottomBar.div
-        .append('div')
-        .style({
-            'position': 'absolute',
-            'width': '100%',
-            'bottom': '4px',
-            'height': '176px'
-        })
-        .attr('class', 'left bottom')
-    ;
 
     surfaceContainer.div.attr('id', 'surfaceContainer');
     metricsContainer.div.attr('id', 'metricsContainer');
+
 
     var surface = layers.surface().addTo(surfaceContainer.div);
 
@@ -116,7 +223,7 @@
     }
 
     function safeValues(d) {
-        return d.values || d._values || [];
+        return d.items || d.values || d._values || [];
     }
 
     function makeMatrix(metric, selected) {
@@ -129,22 +236,30 @@
             , max = 0
             , years = {}
             , name, year
+            , entryDepth = d.depth
             ;
 
         data = safeValues(d);
         i = data.length;
 
-        var key = d.depth == 0
+        var key = entryDepth == 0
             ? 'level'
-            : d.depth == 1
-            ? 'subLevel'
-            : 'name'
+            : entryDepth == 1
+                ? 'subLevel'
+                : entryDepth == 2
+                ? 'subSubLevel'
+                : 'name'
         ;
 
         while(i--) {
             d = data[i];
             if(yearReg.test(d.key)) {
                 d = safeValues(d)[0];
+
+                if (key != 'name' && entryDepth > 1 && d[key] == d['subLevel']) {
+                    key = 'name';
+                }
+
                 value = result[d[key]];
                 if(!value)
                     value = result[d[key]] = {};
@@ -213,6 +328,7 @@
     }
 
     var currentSurface;
+    var surfaceChangeTimer;
     function makeSurface(d, multi) {
         selectedData = d;
 
@@ -224,20 +340,25 @@
         if (!selectedMetric)
             return;
 
-        currentSurface = surface.appendSurface(
-            selectedMetric
-            , makeMatrix(selectedMetric, d)
-            , multi
-        ).surface
-            .transition()
-            .duration(500)
-            .surfaceHeight(surfaceHeight)
-            .surfaceColor(surfaceColor)
-            .surfaceCellId(surfaceCellId)
-            .surfaceCellOver(surfaceCellOver)
-            .surfaceCellOut(surfaceCellOut)
-            .surfaceCellMove(tooltip.mousemove)
-        ;
+        if (surfaceChangeTimer)
+            clearTimeout(surfaceChangeTimer);
+
+        surfaceChangeTimer = setTimeout(function() {
+            currentSurface = surface.appendSurface(
+                selectedMetric
+                , makeMatrix(selectedMetric, d)
+                , multi
+            ).surface
+                .surfaceCellId(surfaceCellId)
+                .surfaceCellOver(surfaceCellOver)
+                .surfaceCellOut(surfaceCellOut)
+                .surfaceCellMove(tooltip.mousemove)
+                .transition()
+                .duration(500)
+                .surfaceHeight(surfaceHeight)
+                .surfaceColor(surfaceColor)
+            ;
+        }, currentSurface ? 0 : 500);
     }
 
     var hovered;
@@ -245,12 +366,14 @@
         tooltip.mouseover(d);
         hovered = d;
         currentSurface.colorize();
+        currentSurface.highlightEdgeByKey(d ? d.data.name : null);
     }
 
     function surfaceCellOut(d) {
         tooltip.mouseout();
         hovered = null;
         currentSurface.colorize();
+        currentSurface.highlightEdgeByKey();
     }
 
     function surfaceCellId(d, x, y) {
@@ -264,9 +387,20 @@
     function surfaceColor(d) {
         var c = d.name ? colors(d.name) : 0;
 
-        var s = hovered && d.name !== hovered.data.name ? .3 : 1;
+        var real = hovered;
+        if (real && !real.data && selectedData != real.parent)
+            real = null;
+
+        var o = real && real.data && d == real.data ? .8 : .5;
+
+        real = real
+            ? real.data ? real.data.name : real.key
+            : null
+        ;
+
+        var s = real && d.name !== real ? .3 : 1;
         c = d3.hsl(c, s, d.name ? 0.5 + d.normalized/2 : 0).rgb();
-        return "rgba(" + parseInt(c.r) + "," + parseInt(c.g) + "," + parseInt(c.b) + ",.5)";
+        return "rgba(" + parseInt(c.r) + "," + parseInt(c.g) + "," + parseInt(c.b) + "," + o + ")";
     }
 
     function treeColor(d) {
@@ -328,6 +462,31 @@
         ;
     }
 
+    !function() {
+        var temp = d3.select("#controls").html();
+        controls.div.style("top","40%").html(temp);
+        controls.div.selectAll("li")
+            .on('click', function() {
+                var that = d3.select(this).select("span:first-child");
+
+                if(!currentSurface)
+                    return;
+
+                if (that.classed("expand-right")) {
+                    surface.turntable(0, 0);
+                }
+                else if (that.classed("expand-left")) {
+                    surface.turntable(1.57, 0);
+                }
+                else if (that.classed("expand-down")) {
+                    surface.turntable(1.57, 1.58);
+                }
+                else if (that.classed("loop")) {
+                    surface.turntable(.5, .3);
+                }
+            })
+    }();
+
     function setWait() {
         d3.select("body").classed('wait', true);
     }
@@ -335,22 +494,29 @@
         d3.select("body").classed('wait', false);
     }
 
+    function treeItemSelect(d) {
+        setWait();
+        makeSurface(d);
+        unsetWait();
+    }
+
+    function treeItemOver(d) {
+        tooltip.mouseover(d);
+        hovered = d;
+        currentSurface.colorize();
+        currentSurface.highlightEdgeByKey(d ? d.key : null);
+    }
+
+    var treeItemOut = surfaceCellOut;
+
     function initTree(data) {
         if (tree)
             tree.remove();
         else {
             tree = layers.treeBar();
-            tree.on('select', function(d) {
-                setWait();
-                makeSurface(d);
-                unsetWait();
-            })
-            .on('mouseover', function(d) {
-                tooltip.mouseover(d);
-            })
-            .on('mouseout', function(d) {
-                tooltip.mouseout();
-            })
+            tree.on('select', treeItemSelect)
+            .on('mouseover', treeItemOver)
+            .on('mouseout', treeItemOut)
             .on('mousemove', tooltip.mousemove)
             ;
         }
@@ -405,8 +571,10 @@
         var lastName
             , level
             , subLevel
+            , subSubLevel
             , reg = /^[IVX]+/
             , reg2 = /^\d+/
+            , reg3 = /^.\)/
             ;
 
         data = d3.nest()
@@ -415,6 +583,9 @@
             })
             .key(function(d) {
                 return d.subLevel;
+            })
+            .key(function(d) {
+                return d.subSubLevel;
             })
             .key(function(d) {
                 return d.name;
@@ -438,11 +609,17 @@
                 if (reg.test(d.name)) {
                     level = d.name;
                     subLevel = level;
+                    subSubLevel = level;
                 } else if (reg2.test(d.name)) {
                     subLevel = d.name;
+                    subSubLevel = subLevel;
+                } else if (reg3.test(d.name)) {
+                    subSubLevel = d.name;
                 }
+
                 d.level = level;
                 d.subLevel = subLevel;
+                d.subSubLevel = subSubLevel;
 
                 fixCosts(d);
 
@@ -557,4 +734,8 @@
 
         return template;
     }
+
+    setTimeout(function() {
+        d3.select('#info').classed('open', false);
+    }, 3000);
 })();
