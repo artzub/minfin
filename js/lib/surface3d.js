@@ -280,6 +280,7 @@
                 .on('mouseover', cellOverFunction)
                 .on('mouseout', cellOutFunction)
                 .on('mousemove', cellMoveFunction)
+                .on('touchmove', cellMoveFunction)
                 .attr('transform', 'translate(' + [w2, h2] + ')')
             ;
             gs.append("path");

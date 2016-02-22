@@ -30,6 +30,7 @@
         , controls = layers.layer({position: "top right menu"}).addTo(ui)
         , bottomBar = layers.layer({position : "bottom left"}).addTo(ui)
         , df = d3.format(",.2f")
+        , dfp = d3.format(",.2%")
         ;
 
     var templateCell = d3.select("#templateCell").html()
@@ -56,16 +57,17 @@
         });
 
     function textForTreeNodeYear(d) {
-        var delta;
+        var delta, pr = 0;
         if(!d)
             return "";
 
         if (lastOver.node != d) {
             if (lastOver.node) {
-                delta = d.value - lastOver.node.value
+                delta = d.value - lastOver.node.value;
+                pr = delta / (Math.max(d.value, lastOver.node.value) || 1);
             }
             d.colorClass = !delta ? "" : delta > 0 ? "green" : "red";
-            d.lastDelta = !delta ? "" : df(Math.abs(delta));
+            d.lastDelta = !delta ? "" : dfp(Math.abs(pr));
             lastOver.node = d;
         }
         d.valueText = df(d.value);
@@ -81,7 +83,14 @@
                 max : 0,
                 mid : 0,
                 value : 0
-            }, data
+            },
+            pr = {
+                min : 0,
+                max : 0,
+                mid : 0,
+                value : 0
+            }
+            , data
             , max = -Infinity
             , min = Infinity
             ;
@@ -113,12 +122,14 @@
                 if(!delta.hasOwnProperty(key))
                     continue;
                 keyObj = key == "value" ? key : key + "Value";
-                if (lastOver.node)
+                if (lastOver.node) {
                     delta[key] = d[keyObj] - lastOver.node[keyObj];
+                    pr[key] = delta[key] / (Math.max(d[keyObj], lastOver.node[keyObj]) || 1);
+                }
 
                 key = key == "value" ? "" : key;
                 d[key + 'colorClass'] = !delta[key || "value"] ? "" : delta[key || "value"] > 0 ? "green" : "red";
-                d[key + 'lastDelta'] = !delta[key || "value"] ? "" : df(Math.abs(delta[key || "value"]));
+                d[key + 'lastDelta'] = !delta[key || "value"] ? "" : dfp(Math.abs(pr[key || "value"]));
             }
             lastOver.node = d;
         }
@@ -130,16 +141,18 @@
     }
 
     function textForCell(d) {
-        var delta;
+        var delta, pr = 0;
         if(!d || !d.data)
             return "";
 
         if (lastOver.cell != d) {
             if (lastOver.cell && lastOver.cell.data) {
-                delta = d.data.value - lastOver.cell.data.value
+                delta = d.data.value - lastOver.cell.data.value;
+                pr = delta / (Math.max(d.data.value, lastOver.cell.data.value) || 1);
+
             }
             d.data.colorClass = delta > 0 ? "green" : delta < 0 ? "red" : "";
-            d.data.lastDelta = !delta ? "" : df(Math.abs(delta));
+            d.data.lastDelta = !delta ? "" : dfp(Math.abs(pr));
             lastOver.cell = d;
         }
         d.data.valueText = df(d.data.value);

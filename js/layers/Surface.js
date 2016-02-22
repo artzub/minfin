@@ -48,6 +48,48 @@ layers.Surface = function(options) {
     layers.merge(options, that.options);
     that.options.margin = that.options.margin || margin;
 
+    function mousedown() {
+        drag = [d3.mouse(this), yaw, pitch];
+        that.div.style('cursor', 'move')
+    }
+
+    function touchstart() {
+        drag = [d3.touch(this), yaw, pitch];
+        that.div.style('cursor', 'move')
+    }
+
+    function mouseup() {
+        drag = false;
+        that.div.style('cursor', null)
+    }
+
+    function touchend() {
+        drag = false;
+        that.div.style('cursor', null)
+    }
+
+    function moveFunc(fun) {
+        return function () {
+            if (!drag)
+                return;
+
+            var mouse = fun(this);
+            yaw = drag[1] - (mouse[0] - drag[0][0]) / 50;
+            pitch = drag[2] + (mouse[1] - drag[0][1]) / 50;
+            pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
+
+            Object.keys(groups).forEach(function (key) {
+                groups[key]
+                && groups[key].surface
+                && groups[key].surface.setTurntable(yaw, pitch)
+                ;
+            });
+        }
+    }
+
+    var mousemove = moveFunc(d3.mouse);
+    var touchmove = moveFunc(d3.touch);
+
     function onAdd(own) {
         if (that.div)
             return;
@@ -70,32 +112,12 @@ layers.Surface = function(options) {
 
         that.resize();
 
-        that.div.on("mousedown", function () {
-                drag = [d3.mouse(this), yaw, pitch];
-                that.div.style('cursor', 'move')
-            })
-            .on("mouseup", function () {
-                drag = false;
-                that.div.style('cursor', null)
-            })
-            .on("mousemove", function () {
-                if (!drag)
-                    return;
-
-                var mouse = d3.mouse(this);
-                yaw = drag[1] - (mouse[0] - drag[0][0]) / 50;
-                pitch = drag[2] + (mouse[1] - drag[0][1]) / 50;
-                pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
-
-                console.log([yaw, pitch]);
-
-                Object.keys(groups).forEach(function(key) {
-                    groups[key]
-                        && groups[key].surface
-                        && groups[key].surface.setTurntable(yaw, pitch)
-                    ;
-                });
-            })
+        that.div.on("mousedown", mousedown)
+            .on("touchstart", touchstart)
+            .on("mouseup", mouseup)
+            .on("touchend", touchend)
+            .on("mousemove", mousemove)
+            .on("touchmove", touchmove)
         ;
 
         d3.select(window).on('resize.treeBar', that.resize);
